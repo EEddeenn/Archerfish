@@ -28,3 +28,13 @@ add_e2e_test(test_e2e_chirp test_e2e_chirp.cpp)
 add_e2e_test(test_e2e_qpsk test_e2e_qpsk.cpp)
 add_e2e_test(test_e2e_replay test_e2e_replay.cpp)
 add_e2e_test(test_e2e_pipeline test_e2e_pipeline.cpp)
+
+add_executable(test_qpsk_impairments test_qpsk_impairments.cpp)
+target_compile_definitions(test_qpsk_impairments PRIVATE EXAMPLES_DIR="${CMAKE_SOURCE_DIR}/examples")
+target_link_libraries(test_qpsk_impairments
+    PRIVATE
+        archerfish_dsp
+        archerfish_impairments
+        Catch2::Catch2WithMain
+)
+add_test(NAME integration_qpsk_impairments COMMAND test_qpsk_impairments)

@@ -5,6 +5,24 @@
 #include <cmath>
 #include <numeric>
 
+namespace {
+
+constexpr double kPi = 3.14159265358979323846;
+
+// Gray decode: convert Gray-coded index to natural binary position
+// Reference: liquid-dsp modem_utilities.c
+static uint32_t gray_decode(uint32_t x) {
+    uint32_t mask = x;
+    uint32_t result = x;
+    for (int i = 0; i < 8; ++i) {
+        mask >>= 1;
+        result ^= mask;
+    }
+    return result;
+}
+
+} // namespace
+
 namespace archerfish::dsp {
 
 void ModulatorSource::build_constellation() {
@@ -14,34 +32,61 @@ void ModulatorSource::build_constellation() {
         constellation_ = {{1.0f, 0.0f}, {-1.0f, 0.0f}};
         break;
     case ModulationType::QPSK: {
+        // Gray-coded QPSK: bit0→I sign, bit1→Q sign
+        // Reference: liquid-dsp modem_qpsk.proto.c
+        // Mapping: 00→(+,+), 01→(-,+), 10→(+,-), 11→(-,-)
         float s = 1.0f / std::sqrt(2.0f);
-        constellation_ = {{s, s}, {-s, s}, {-s, -s}, {s, -s}};
+        constellation_ = {
+            {s, s},    // 00
+            {-s, s},   // 01
+            {s, -s},   // 10
+            {-s, -s}   // 11
+        };
         break;
     }
     case ModulationType::PSK8: {
+        // Gray-coded 8-PSK
+        // Reference: GNU Radio gr-digital constellation.cc constellation_8psk
+        // Angles chosen so adjacent phase states differ by exactly 1 bit
+        float a = static_cast<float>(kPi) / 8.0f;
+        int angles[] = {1, 7, 15, 9, 3, 5, 13, 11};
         for (int k = 0; k < 8; ++k) {
-            float angle = static_cast<float>(k) * M_PI / 4.0f;
-            constellation_.push_back({std::cos(angle), std::sin(angle)});
+            float theta = angles[k] * a;
+            constellation_.push_back({std::cos(theta), std::sin(theta)});
         }
         break;
     }
     case ModulationType::QAM16: {
-        for (int iy = 0; iy < 4; ++iy) {
-            for (int ix = 0; ix < 4; ++ix) {
-                float re = (static_cast<float>(ix) - 1.5f) / 1.5f;
-                float im = (static_cast<float>(iy) - 1.5f) / 1.5f;
-                constellation_.push_back({re, im});
-            }
+        // Gray-coded 16-QAM using liquid-dsp algorithm
+        // Reference: liquid-dsp modem_qam.proto.c
+        // Split symbol bits: upper 2→I axis, lower 2→Q axis
+        // Apply gray_decode independently to each axis
+        // Normalize for unit average symbol energy: alpha = 1/sqrt(10)
+        const float alpha = 1.0f / std::sqrt(10.0f);
+        for (uint32_t sym = 0; sym < 16; ++sym) {
+            uint32_t si = sym >> 2;
+            uint32_t sq = sym & 3;
+            si = gray_decode(si);
+            sq = gray_decode(sq);
+            float re = (2.0f * static_cast<float>(si) - 3.0f) * alpha;
+            float im = (2.0f * static_cast<float>(sq) - 3.0f) * alpha;
+            constellation_.push_back({re, im});
         }
         break;
     }
     case ModulationType::QAM64: {
-        for (int iy = 0; iy < 8; ++iy) {
-            for (int ix = 0; ix < 8; ++ix) {
-                float re = (static_cast<float>(ix) - 3.5f) / 3.5f;
-                float im = (static_cast<float>(iy) - 3.5f) / 3.5f;
-                constellation_.push_back({re, im});
-            }
+        // Gray-coded 64-QAM using liquid-dsp algorithm
+        // Split symbol bits: upper 3→I axis, lower 3→Q axis
+        // Normalize for unit average symbol energy: alpha = 1/sqrt(42)
+        const float alpha = 1.0f / std::sqrt(42.0f);
+        for (uint32_t sym = 0; sym < 64; ++sym) {
+            uint32_t si = sym >> 3;
+            uint32_t sq = sym & 7;
+            si = gray_decode(si);
+            sq = gray_decode(sq);
+            float re = (2.0f * static_cast<float>(si) - 7.0f) * alpha;
+            float im = (2.0f * static_cast<float>(sq) - 7.0f) * alpha;
+            constellation_.push_back({re, im});
         }
         break;
     }
@@ -103,8 +148,62 @@ void ModulatorSource::prepare() {
     build_rrc_taps();
     symbol_buffer_.clear();
     shaped_buffer_.clear();
+    filter_tail_.assign(rrc_taps_.size() - 1, {0.0f, 0.0f});
     output_offset_ = 0;
     samples_produced_ = 0;
+
+    constexpr size_t calib_symbols = 256;
+    auto saved_rng = rng_;
+
+    size_t bits_per_symbol = 1;
+    if (constellation_.size() > 1)
+        bits_per_symbol = static_cast<size_t>(std::lround(std::log2(static_cast<double>(constellation_.size()))));
+
+    double mean_symbol_mag = 0.0;
+    std::vector<std::complex<float>> symbols(calib_symbols);
+    for (size_t i = 0; i < calib_symbols; ++i) {
+        uint32_t bits = static_cast<uint32_t>(rng_()) & ((1u << bits_per_symbol) - 1);
+        symbols[i] = map_symbol(bits);
+        mean_symbol_mag += std::abs(symbols[i]);
+    }
+    mean_symbol_mag /= static_cast<double>(calib_symbols);
+
+    size_t upsampled_len = calib_symbols * samples_per_symbol_ + rrc_taps_.size() - 1;
+    std::vector<std::complex<float>> upsampled(upsampled_len, {0.0f, 0.0f});
+    for (size_t i = 0; i < calib_symbols; ++i)
+        upsampled[i * samples_per_symbol_] = symbols[i];
+
+    std::vector<std::complex<float>> shaped(upsampled_len, {0.0f, 0.0f});
+    for (size_t n = 0; n < upsampled_len; ++n) {
+        std::complex<float> acc{0.0f, 0.0f};
+        size_t k_min = (n >= rrc_taps_.size() - 1) ? n - (rrc_taps_.size() - 1) : 0;
+        size_t k_max = std::min(n, upsampled_len - 1);
+        for (size_t k = k_min; k <= k_max; ++k) {
+            size_t tap_idx = n - k;
+            if (tap_idx < rrc_taps_.size())
+                acc += upsampled[k] * rrc_taps_[tap_idx];
+        }
+        shaped[n] = acc;
+    }
+
+    double peak = 0.0;
+    double sum_sq = 0.0;
+    for (auto& s : shaped) {
+        double mag = std::abs(s);
+        peak = std::max(peak, mag);
+        sum_sq += mag * mag;
+    }
+    double rms = std::sqrt(sum_sq / static_cast<double>(shaped.size()));
+
+    if (mean_symbol_mag > 0.0 && rms > 0.0) {
+        rms_ratio_ = rms / mean_symbol_mag;
+        peak_to_rms_ratio_ = peak / rms;
+    } else {
+        rms_ratio_ = 1.0 / std::sqrt(2.0);
+        peak_to_rms_ratio_ = std::sqrt(2.0);
+    }
+
+    rng_ = saved_rng;
 }
 
 size_t ModulatorSource::render_block(std::complex<float>* out, size_t max_samples) {
@@ -138,25 +237,42 @@ size_t ModulatorSource::render_block(std::complex<float>* out, size_t max_sample
                 symbols[i] = map_symbol(bits);
             }
 
-            size_t upsampled_len = num_symbols * samples_per_symbol_ + rrc_taps_.size() - 1;
+            const size_t N = num_symbols * samples_per_symbol_;
+            const size_t L = rrc_taps_.size();
+            const size_t tail_len = L - 1;
+
+            // Upsample with zero-padding for filter ring-out
+            size_t upsampled_len = N + tail_len;
             std::vector<std::complex<float>> upsampled(upsampled_len, {0.0f, 0.0f});
             for (size_t i = 0; i < num_symbols; ++i) {
                 upsampled[i * samples_per_symbol_] = symbols[i];
             }
 
-            shaped_buffer_.assign(upsampled_len, {0.0f, 0.0f});
-            for (size_t n = 0; n < upsampled_len; ++n) {
+            // Overlap-save: prepend previous batch tail for inter-batch continuity
+            size_t extended_len = tail_len + upsampled_len;
+            std::vector<std::complex<float>> extended(extended_len, {0.0f, 0.0f});
+            std::copy(filter_tail_.begin(), filter_tail_.end(), extended.begin());
+            std::copy(upsampled.begin(), upsampled.end(), extended.begin() + tail_len);
+
+            shaped_buffer_.assign(N, {0.0f, 0.0f});
+            for (size_t n = 0; n < N; ++n) {
+                size_t ext_n = n + tail_len;
                 std::complex<float> acc{0.0f, 0.0f};
-                size_t k_min = (n >= rrc_taps_.size() - 1) ? n - (rrc_taps_.size() - 1) : 0;
-                size_t k_max = std::min(n, upsampled_len - 1);
+                size_t k_min = (ext_n >= tail_len) ? ext_n - tail_len : 0;
+                size_t k_max = std::min(ext_n, extended_len - 1);
                 for (size_t k = k_min; k <= k_max; ++k) {
-                    size_t tap_idx = n - k;
-                    if (tap_idx < rrc_taps_.size()) {
-                        acc += upsampled[k] * rrc_taps_[tap_idx];
+                    size_t tap_idx = ext_n - k;
+                    if (tap_idx < L) {
+                        acc += extended[k] * rrc_taps_[tap_idx];
                     }
                 }
                 shaped_buffer_[n] = acc;
             }
+
+            // Preserve filter state: save last tail_len upsampled samples (before zero-pad)
+            filter_tail_.assign(
+                upsampled.begin() + (N - tail_len),
+                upsampled.begin() + N);
             output_offset_ = 0;
         }
     }
@@ -169,8 +285,8 @@ WaveformMetadata ModulatorSource::report_metadata() const {
     WaveformMetadata meta;
     meta.sample_rate = sample_rate_;
     meta.peak_amplitude = amplitude_;
-    meta.rms_amplitude = amplitude_ / std::sqrt(2.0);
-    meta.crest_factor = std::sqrt(2.0);
+    meta.rms_amplitude = amplitude_ * rms_ratio_;
+    meta.crest_factor = peak_to_rms_ratio_;
     meta.duration_sec = duration_sec_;
     meta.repeats = !duration_sec_.has_value();
     meta.nominal_bandwidth = symbol_rate_ * (1.0 + rrc_alpha_);
@@ -181,8 +297,14 @@ void ModulatorSource::reset() {
     rng_.seed(seed_);
     symbol_buffer_.clear();
     shaped_buffer_.clear();
+    if (!rrc_taps_.empty())
+        filter_tail_.assign(rrc_taps_.size() - 1, {0.0f, 0.0f});
+    else
+        filter_tail_.clear();
     output_offset_ = 0;
     samples_produced_ = 0;
+    peak_to_rms_ratio_ = std::sqrt(2.0);
+    rms_ratio_ = 1.0 / std::sqrt(2.0);
 }
 
 } // namespace archerfish::dsp

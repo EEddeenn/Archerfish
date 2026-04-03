@@ -22,6 +22,8 @@ public:
     WaveformMetadata report_metadata() const override;
     void reset() override;
 
+    const std::vector<std::complex<float>>& constellation() const { return constellation_; }
+
 private:
     ModulationType modulation_{ModulationType::BPSK};
     double symbol_rate_{1e6};
@@ -37,8 +39,11 @@ private:
     std::vector<float> rrc_taps_;
     std::vector<std::complex<float>> symbol_buffer_;
     std::vector<std::complex<float>> shaped_buffer_;
+    std::vector<std::complex<float>> filter_tail_;
     size_t output_offset_{0};
     size_t samples_produced_{0};
+    double peak_to_rms_ratio_{std::sqrt(2.0)};
+    double rms_ratio_{1.0 / std::sqrt(2.0)};
 
     void build_constellation();
     void build_rrc_taps();
