@@ -18,6 +18,7 @@ struct RenderJob {
     nlohmann::json waveform_config;
     double sample_rate{0.0};
     double duration_sec{0.0};
+    double start_sec{0.0};
     size_t block_size{32768};
 };
 

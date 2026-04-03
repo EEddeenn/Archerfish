@@ -47,7 +47,7 @@ private:
     StateMachine state_machine_;
     std::unique_ptr<SampleQueue> queue_;
     std::vector<RenderJob> render_jobs_;
-    std::unique_ptr<TxWorker> tx_worker_;
+    TxWorker* active_tx_worker_{nullptr};
     RunMetrics metrics_;
     scenario::Plan current_plan_;
 };

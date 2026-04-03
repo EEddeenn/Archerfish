@@ -23,6 +23,7 @@ private:
     double frequency_hz_{0.0};
     double sample_rate_{1e6};
     std::optional<double> duration_sec_;
+    float phase_{0.0f};
     size_t samples_generated_{0};
 };
 

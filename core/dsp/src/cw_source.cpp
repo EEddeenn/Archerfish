@@ -19,6 +19,7 @@ void CwSource::configure(const nlohmann::json& params) {
 
 void CwSource::prepare() {
     samples_generated_ = 0;
+    phase_ = 0.0f;
 }
 
 size_t CwSource::render_block(std::complex<float>* out, size_t max_samples) {
@@ -32,14 +33,14 @@ size_t CwSource::render_block(std::complex<float>* out, size_t max_samples) {
 
     size_t to_generate = std::min(max_samples, total_available);
 
-    const double phase_inc = 2.0 * M_PI * frequency_hz_ / sample_rate_;
+    const float phase_inc = static_cast<float>(2.0 * M_PI * frequency_hz_ / sample_rate_);
     const float amp = static_cast<float>(amplitude_);
+    const float two_pi = static_cast<float>(2.0 * M_PI);
 
     for (size_t i = 0; i < to_generate; ++i) {
-        double phase = phase_inc * static_cast<double>(samples_generated_ + i);
-        float cos_p = static_cast<float>(std::cos(phase));
-        float sin_p = static_cast<float>(std::sin(phase));
-        out[i] = amp * std::complex<float>(cos_p, sin_p);
+        out[i] = amp * std::complex<float>(std::cos(phase_), std::sin(phase_));
+        phase_ += phase_inc;
+        if (phase_ > two_pi) phase_ -= two_pi;
     }
 
     samples_generated_ += to_generate;
@@ -60,6 +61,7 @@ WaveformMetadata CwSource::report_metadata() const {
 
 void CwSource::reset() {
     samples_generated_ = 0;
+    phase_ = 0.0f;
 }
 
 } // namespace archerfish::dsp

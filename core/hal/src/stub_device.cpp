@@ -63,6 +63,9 @@ void StubDevice::send_samples(uint32_t channel,
                               const std::complex<float>* /*data*/,
                               size_t count,
                               const TxMetadata& meta) {
+    if (!is_tx_active(channel)) {
+        return;
+    }
     samples_sent_[channel] += count;
     record_samples(channel, count, meta);
 }

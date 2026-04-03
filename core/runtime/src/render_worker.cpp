@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <thread>
 
+#include <spdlog/spdlog.h>
+
 #include "archerfish/dsp/chirp_source.hpp"
 #include "archerfish/dsp/cw_source.hpp"
 #include "archerfish/dsp/file_source.hpp"
@@ -52,18 +54,18 @@ void RenderWorker::run() {
 
     size_t total_target = static_cast<size_t>(job_.sample_rate * job_.duration_sec);
     bool first_block = true;
-    std::vector<std::complex<float>> render_buf(job_.block_size);
-    SampleBlock block;
-    block.samples.reserve(job_.block_size);
 
     while (samples_rendered_.load(std::memory_order_relaxed) < total_target) {
         size_t remaining = total_target - samples_rendered_.load(std::memory_order_relaxed);
         size_t to_render = std::min(remaining, job_.block_size);
 
-        size_t produced = source->render_block(render_buf.data(), to_render);
+        SampleBlock block;
+        block.samples.resize(to_render);
+
+        size_t produced = source->render_block(block.samples.data(), to_render);
         if (produced == 0) break;
 
-        block.samples.assign(render_buf.data(), render_buf.data() + produced);
+        block.samples.resize(produced);
         block.start_of_burst = first_block;
         first_block = false;
 
@@ -73,9 +75,8 @@ void RenderWorker::run() {
         }
 
         while (!queue_.push(std::move(block))) {
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
-        block.samples.reserve(job_.block_size);
 
         samples_rendered_.store(new_total, std::memory_order_release);
     }
@@ -85,10 +86,11 @@ void RenderWorker::run() {
         sentinel.end_of_burst = true;
         sentinel.start_of_burst = false;
         while (!queue_.push(std::move(sentinel))) {
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     }
 
+    spdlog::info("Render complete: {} samples, target {}", samples_rendered_.load(), total_target);
     complete_.store(true, std::memory_order_release);
 }
 

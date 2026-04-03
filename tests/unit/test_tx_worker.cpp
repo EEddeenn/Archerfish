@@ -8,6 +8,7 @@ using namespace archerfish::hal;
 
 TEST_CASE("TxWorker sends blocks through queue to device", "[runtime][tx]") {
     StubDevice device;
+    device.start_tx(0);
     SampleQueue queue(16);
 
     TxWorker worker(queue, device, 0);
@@ -32,6 +33,7 @@ TEST_CASE("TxWorker sends blocks through queue to device", "[runtime][tx]") {
 
 TEST_CASE("TxWorker total samples_sent matches expected", "[runtime][tx]") {
     StubDevice device;
+    device.start_tx(0);
     SampleQueue queue(16);
 
     TxWorker worker(queue, device, 0);
@@ -54,6 +56,7 @@ TEST_CASE("TxWorker total samples_sent matches expected", "[runtime][tx]") {
 
 TEST_CASE("TxWorker start_of_burst and end_of_burst metadata", "[runtime][tx]") {
     StubDevice device;
+    device.start_tx(0);
     SampleQueue queue(16);
 
     TxWorker worker(queue, device, 0);
@@ -86,6 +89,7 @@ TEST_CASE("TxWorker start_of_burst and end_of_burst metadata", "[runtime][tx]") 
 
 TEST_CASE("TxWorker graceful shutdown via request_stop", "[runtime][tx]") {
     StubDevice device;
+    device.start_tx(0);
     SampleQueue queue(16);
 
     TxWorker worker(queue, device, 0);
@@ -105,6 +109,7 @@ TEST_CASE("TxWorker graceful shutdown via request_stop", "[runtime][tx]") {
 
 TEST_CASE("TxWorker metrics are accessible", "[runtime][tx]") {
     StubDevice device;
+    device.start_tx(0);
     SampleQueue queue(16);
 
     TxWorker worker(queue, device, 0);

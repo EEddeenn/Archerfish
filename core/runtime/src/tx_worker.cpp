@@ -35,13 +35,16 @@ void TxWorker::run() {
             hal::TxMetadata meta;
             meta.start_of_burst = block->start_of_burst;
             meta.end_of_burst = block->end_of_burst;
+            meta.has_time_spec = block->has_time_spec;
+            meta.time_spec_sec = block->time_spec_sec;
 
+            auto sz = block->samples.size();
             if (!block->samples.empty()) {
                 device_.send_samples(channel_, block->samples.data(),
-                                      block->samples.size(), meta);
+                                     sz, meta);
             }
 
-            metrics_.samples_sent.fetch_add(block->samples.size(), std::memory_order_relaxed);
+            metrics_.samples_sent.fetch_add(sz, std::memory_order_relaxed);
             metrics_.blocks_sent.fetch_add(1, std::memory_order_relaxed);
             got_first_block = true;
 
@@ -55,7 +58,7 @@ void TxWorker::run() {
             if (got_first_block) {
                 metrics_.underruns.fetch_add(1, std::memory_order_relaxed);
             }
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::microseconds(500));
         }
     }
 

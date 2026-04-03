@@ -16,7 +16,7 @@ public:
     SpscQueue(const SpscQueue&) = delete;
     SpscQueue& operator=(const SpscQueue&) = delete;
 
-    [[nodiscard]] bool push(T item) {
+    [[nodiscard]] bool push(T&& item) {
         auto tail = tail_.load(std::memory_order_relaxed);
         auto next_tail = (tail + 1) % capacity_;
         if (next_tail == head_.load(std::memory_order_acquire)) {
@@ -68,6 +68,8 @@ struct SampleBlock {
     std::vector<std::complex<float>> samples;
     bool start_of_burst{false};
     bool end_of_burst{false};
+    double time_spec_sec{0.0};
+    bool has_time_spec{false};
 };
 
 using SampleQueue = SpscQueue<SampleBlock>;

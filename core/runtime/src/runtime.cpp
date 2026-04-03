@@ -51,6 +51,7 @@ bool Runtime::arm() {
         job.waveform_config.update(instr.waveform.params);
         job.sample_rate = instr.sample_rate;
         job.duration_sec = instr.duration_sec;
+        job.start_sec = instr.start_sec;
         job.block_size = config_.block_size;
         render_jobs_.push_back(std::move(job));
     }
@@ -64,22 +65,37 @@ bool Runtime::run() {
     }
 
     auto run_start = std::chrono::steady_clock::now();
-
-    device_->start_tx(config_.channel);
+    std::chrono::steady_clock::time_point tx_start_time;
 
     for (size_t job_idx = 0; job_idx < render_jobs_.size(); ++job_idx) {
-        queue_ = std::make_unique<SampleQueue>(config_.queue_capacity);
         const auto& job = render_jobs_[job_idx];
 
+        if (job_idx > 0) {
+            double prev_end = render_jobs_[job_idx - 1].start_sec + render_jobs_[job_idx - 1].duration_sec;
+            double delay = job.start_sec - prev_end;
+            if (delay > 0.0) {
+                std::this_thread::sleep_for(std::chrono::duration<double>(delay));
+            }
+        } else if (job.start_sec > 0.0) {
+            std::this_thread::sleep_for(std::chrono::duration<double>(job.start_sec));
+        }
+
+        if (job_idx == 0) {
+            device_->start_tx(config_.channel);
+            tx_start_time = std::chrono::steady_clock::now();
+        }
+
+        queue_ = std::make_unique<SampleQueue>(config_.queue_capacity);
         RenderWorker render_worker(*queue_, job);
 
         render_worker.start();
 
         while (queue_->size() < config_.queue_capacity / 2 && !render_worker.is_complete()) {
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
 
         TxWorker tx_worker(*queue_, *device_, config_.channel);
+        active_tx_worker_ = &tx_worker;
         tx_worker.start();
 
         render_worker.join();
@@ -87,15 +103,24 @@ bool Runtime::run() {
             tx_worker.request_stop();
         }
         tx_worker.join();
+        active_tx_worker_ = nullptr;
 
         metrics_.total_samples_sent += tx_worker.metrics().samples_sent.load();
         metrics_.total_blocks_sent += tx_worker.metrics().blocks_sent.load();
         metrics_.underruns += tx_worker.metrics().underruns.load();
     }
 
-    auto run_stop = std::chrono::steady_clock::now();
+    if (!render_jobs_.empty()) {
+        double expected_air_time = static_cast<double>(metrics_.total_samples_sent) / render_jobs_.front().sample_rate;
+        auto tx_elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - tx_start_time).count();
+        double drain_remaining = expected_air_time - tx_elapsed;
+        if (drain_remaining > 0.0) {
+            std::this_thread::sleep_for(std::chrono::duration<double>(drain_remaining));
+        }
+        device_->stop_tx(config_.channel);
+    }
 
-    device_->stop_tx(config_.channel);
+    auto run_stop = std::chrono::steady_clock::now();
 
     auto start_sec = std::chrono::duration<double>(run_start.time_since_epoch()).count();
     auto stop_sec = std::chrono::duration<double>(run_stop.time_since_epoch()).count();
@@ -109,8 +134,15 @@ bool Runtime::run() {
 }
 
 void Runtime::abort() {
+    if (active_tx_worker_) {
+        active_tx_worker_->request_stop();
+    }
     state_machine_.transition_to(RuntimeState::Aborted);
     device_->stop_tx(config_.channel);
+    if (active_tx_worker_) {
+        active_tx_worker_->join();
+        active_tx_worker_ = nullptr;
+    }
 }
 
 RuntimeState Runtime::state() const {

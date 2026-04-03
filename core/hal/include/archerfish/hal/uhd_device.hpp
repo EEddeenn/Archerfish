@@ -4,6 +4,7 @@
 
 #include <archerfish/hal/hal_device.hpp>
 
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -17,6 +18,7 @@ namespace archerfish::hal {
 class UhdDevice : public IHalDevice {
 public:
     explicit UhdDevice(const uhd::device_addr_t& dev_addr);
+    ~UhdDevice() override;
 
     [[nodiscard]] std::string device_id() const override;
     [[nodiscard]] DeviceCapabilities get_capabilities() const override;
@@ -44,11 +46,14 @@ public:
     static std::vector<uhd::device_addr_t> enumerate_uhd_devices();
 
 private:
+    void stop_all_tx();
+
     std::string id_;
     uhd::device_addr_t dev_addr_;
     uhd::usrp::multi_usrp::sptr usrp_;
-    uhd::tx_streamer::sptr tx_streamer_;
+    std::unordered_map<uint32_t, uhd::tx_streamer::sptr> tx_streamers_;
     std::unordered_map<uint32_t, bool> tx_active_;
+    mutable std::mutex mutex_;
 };
 
 } // namespace archerfish::hal

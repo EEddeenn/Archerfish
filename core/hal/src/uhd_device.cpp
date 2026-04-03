@@ -19,13 +19,17 @@ UhdDevice::UhdDevice(const uhd::device_addr_t& dev_addr)
     spdlog::info("USRP device opened: {} ({})", id_, usrp_->get_mboard_name());
 }
 
+UhdDevice::~UhdDevice() {
+    stop_all_tx();
+}
+
 std::string UhdDevice::device_id() const {
     return id_;
 }
 
 DeviceCapabilities UhdDevice::get_capabilities() const {
     DeviceCapabilities caps;
-    caps.num_channels = usrp_->get_num_mboards();
+    caps.num_channels = usrp_->get_tx_num_channels();
 
     try {
         auto tx_freq_range = usrp_->get_tx_freq_range(0);
@@ -75,82 +79,173 @@ DeviceCapabilities UhdDevice::get_capabilities() const {
 }
 
 void UhdDevice::set_center_freq(uint32_t channel, double hz) {
-    usrp_->set_tx_freq(hz, channel);
-    spdlog::debug("CH{} set_center_freq: {:.2e} Hz", channel, hz);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        usrp_->set_tx_freq(hz, channel);
+        spdlog::debug("CH{} set_center_freq: {:.2e} Hz", channel, hz);
+    } catch (const uhd::exception& e) {
+        spdlog::error("CH{} set_center_freq({:.2e} Hz) failed: {}", channel, hz, e.what());
+        throw;
+    }
 }
 
 void UhdDevice::set_sample_rate(uint32_t channel, double sps) {
-    usrp_->set_tx_rate(sps, channel);
-    spdlog::debug("CH{} set_sample_rate: {:.2e} Sps", channel, sps);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        usrp_->set_tx_rate(sps, channel);
+        spdlog::debug("CH{} set_sample_rate: {:.2e} Sps", channel, sps);
+    } catch (const uhd::exception& e) {
+        spdlog::error("CH{} set_sample_rate({:.2e} Sps) failed: {}", channel, sps, e.what());
+        throw;
+    }
 }
 
 void UhdDevice::set_bandwidth(uint32_t channel, double hz) {
-    usrp_->set_tx_bandwidth(hz, channel);
-    spdlog::debug("CH{} set_bandwidth: {:.2e} Hz", channel, hz);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        usrp_->set_tx_bandwidth(hz, channel);
+        spdlog::debug("CH{} set_bandwidth: {:.2e} Hz", channel, hz);
+    } catch (const uhd::exception& e) {
+        spdlog::error("CH{} set_bandwidth({:.2e} Hz) failed: {}", channel, hz, e.what());
+        throw;
+    }
 }
 
 void UhdDevice::set_gain(uint32_t channel, double db) {
-    usrp_->set_tx_gain(db, channel);
-    spdlog::debug("CH{} set_gain: {:.1f} dB", channel, db);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        usrp_->set_tx_gain(db, channel);
+        spdlog::debug("CH{} set_gain: {:.1f} dB", channel, db);
+    } catch (const uhd::exception& e) {
+        spdlog::error("CH{} set_gain({:.1f} dB) failed: {}", channel, db, e.what());
+        throw;
+    }
 }
 
 void UhdDevice::set_antenna(uint32_t channel, std::string_view port) {
-    usrp_->set_tx_antenna(std::string(port), channel);
-    spdlog::debug("CH{} set_antenna: {}", channel, port);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        usrp_->set_tx_antenna(std::string(port), channel);
+        spdlog::debug("CH{} set_antenna: {}", channel, port);
+    } catch (const uhd::exception& e) {
+        spdlog::error("CH{} set_antenna({}) failed: {}", channel, port, e.what());
+        throw;
+    }
 }
 
 void UhdDevice::set_clock_source(std::string_view source) {
-    usrp_->set_clock_source(std::string(source));
-    spdlog::debug("set_clock_source: {}", source);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        usrp_->set_clock_source(std::string(source));
+        spdlog::debug("set_clock_source: {}", source);
+    } catch (const uhd::exception& e) {
+        spdlog::error("set_clock_source({}) failed: {}", source, e.what());
+        throw;
+    }
 }
 
 void UhdDevice::set_time_source(std::string_view source) {
-    usrp_->set_time_source(std::string(source));
-    spdlog::debug("set_time_source: {}", source);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        usrp_->set_time_source(std::string(source));
+        spdlog::debug("set_time_source: {}", source);
+    } catch (const uhd::exception& e) {
+        spdlog::error("set_time_source({}) failed: {}", source, e.what());
+        throw;
+    }
 }
 
 void UhdDevice::sync_time_now() {
-    usrp_->set_time_now(uhd::time_spec_t(0.0));
-    spdlog::debug("sync_time_now");
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        usrp_->set_time_now(uhd::time_spec_t(0.0));
+        spdlog::debug("sync_time_now");
+    } catch (const uhd::exception& e) {
+        spdlog::error("sync_time_now failed: {}", e.what());
+        throw;
+    }
 }
 
 void UhdDevice::start_tx(uint32_t channel) {
-    tx_streamer_ = usrp_->get_tx_stream(uhd::stream_args_t("fc32"));
+    std::lock_guard<std::mutex> lock(mutex_);
+    uhd::stream_args_t stream_args("fc32");
+    stream_args.channels = {channel};
+    tx_streamers_[channel] = usrp_->get_tx_stream(stream_args);
     tx_active_[channel] = true;
-    spdlog::info("CH{} TX started (streamer created, spb={})", channel, tx_streamer_->get_max_num_samps());
+    spdlog::info("CH{} TX started (streamer created, spb={})",
+                 channel, tx_streamers_[channel]->get_max_num_samps());
 }
 
 void UhdDevice::stop_tx(uint32_t channel) {
-    if (tx_streamer_) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = tx_streamers_.find(channel);
+    if (it != tx_streamers_.end() && it->second) {
         uhd::tx_metadata_t md;
         md.end_of_burst = true;
-        std::vector<std::complex<float>> empty;
-        tx_streamer_->send(empty.data(), 0, md);
+        std::vector<std::complex<float>> sentinel(1, {0.0f, 0.0f});
+        it->second->send(sentinel.data(), 1, md);
+        tx_streamers_.erase(it);
     }
-    tx_streamer_ = nullptr;
     tx_active_[channel] = false;
     spdlog::info("CH{} TX stopped", channel);
 }
 
 void UhdDevice::send_samples(uint32_t channel,
-                               const std::complex<float>* data,
-                               size_t count,
-                               const TxMetadata& meta) {
-    if (!tx_streamer_) {
-        spdlog::error("send_samples called without active TX streamer");
+                              const std::complex<float>* data,
+                              size_t count,
+                              const TxMetadata& meta) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = tx_streamers_.find(channel);
+    if (it == tx_streamers_.end() || !it->second) {
+        spdlog::error("send_samples called without active TX streamer on CH{}", channel);
         return;
     }
+    if (!is_tx_active(channel)) {
+        spdlog::warn("send_samples called on CH{} but TX not active", channel);
+        return;
+    }
+
+    auto& streamer = it->second;
     uhd::tx_metadata_t md;
     md.has_time_spec = meta.has_time_spec;
     md.time_spec = uhd::time_spec_t(meta.time_spec_sec);
     md.start_of_burst = meta.start_of_burst;
     md.end_of_burst = meta.end_of_burst;
-    tx_streamer_->send(data, count, md);
+
+    size_t sent = 0;
+    while (sent < count) {
+        size_t n = streamer->send(data + sent, count - sent, md);
+        if (n == 0) {
+            spdlog::warn("UHD TX streamer accepted 0 samples on CH{} ({}/{} sent)",
+                         channel, sent, count);
+            break;
+        }
+        md.start_of_burst = false;
+        sent += n;
+    }
 }
 
 bool UhdDevice::is_tx_active(uint32_t channel) const {
     auto it = tx_active_.find(channel);
     return it != tx_active_.end() && it->second;
+}
+
+void UhdDevice::stop_all_tx() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& [channel, streamer] : tx_streamers_) {
+        if (streamer) {
+            try {
+                uhd::tx_metadata_t md;
+                md.end_of_burst = true;
+                std::vector<std::complex<float>> sentinel(1, {0.0f, 0.0f});
+                streamer->send(sentinel.data(), 1, md);
+            } catch (const std::exception& e) {
+                spdlog::warn("Error sending EOB on CH{} during cleanup: {}", channel, e.what());
+            }
+        }
+        tx_active_[channel] = false;
+    }
+    tx_streamers_.clear();
 }
 
 std::vector<uhd::device_addr_t> UhdDevice::enumerate_uhd_devices() {
