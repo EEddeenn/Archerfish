@@ -40,6 +40,7 @@ struct RenderInstruction {
     double duration_sec{0.0};
     double sample_rate{0.0};
     std::optional<double> resample_ratio;
+    std::optional<ImpairmentSettings> impairments;
 };
 
 struct Plan {

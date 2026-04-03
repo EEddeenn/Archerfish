@@ -5,20 +5,31 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Export compile_commands.json for tooling
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(GNUInstallDirs)
+include(FetchContent)
 
 enable_testing()
 include(CTest)
 
-# --- Dependencies (resolved by Conan CMakeDeps) ---
+# --- Dependencies (Homebrew + system) ---
+
 find_package(fmt REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(CLI11 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Catch2 REQUIRED)
+find_package(SampleRate REQUIRED)
+
+# json-schema-validator — not in Homebrew, fetch from source
+FetchContent_Declare(
+    json_schema_validator
+    GIT_REPOSITORY https://github.com/pboettch/json-schema-validator.git
+    GIT_TAG        2.4.0
+)
+set(JSON_SCHEMA_VALIDATOR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(json_schema_validator)
 
 # Optional: UHD (system-installed)
 find_package(UHD QUIET)
@@ -41,6 +52,13 @@ add_subdirectory(tests)
 # --- Install the main executable ---
 install(TARGETS archerfish
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+# Install the FetchContent'd json-schema-validator so the export set can find it
+install(TARGETS nlohmann_json_schema_validator
+    EXPORT archerfish-targets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
 # --- Install all library targets with export set ---

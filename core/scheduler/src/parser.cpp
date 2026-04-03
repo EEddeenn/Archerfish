@@ -94,6 +94,14 @@ static std::expected<ImpairmentSettings, ErrorList> parse_impairments(const json
     if (j.contains("dc_offset_i")) imp.dc_offset_i = j.at("dc_offset_i").get<double>();
     if (j.contains("dc_offset_q")) imp.dc_offset_q = j.at("dc_offset_q").get<double>();
     if (j.contains("awgn_power")) imp.awgn_power = j.at("awgn_power").get<double>();
+    if (j.contains("amplitude_ripple_db"))
+        imp.amplitude_ripple_db = j.at("amplitude_ripple_db").get<double>();
+    if (j.contains("amplitude_ripple_freq_hz"))
+        imp.amplitude_ripple_freq_hz = j.at("amplitude_ripple_freq_hz").get<double>();
+    if (j.contains("delay_sec"))
+        imp.delay_sec = j.at("delay_sec").get<double>();
+    if (j.contains("burst_dropout_rate"))
+        imp.burst_dropout_rate = j.at("burst_dropout_rate").get<double>();
     return imp;
 }
 

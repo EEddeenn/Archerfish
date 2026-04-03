@@ -43,6 +43,10 @@ struct ImpairmentSettings {
     std::optional<double> dc_offset_i;
     std::optional<double> dc_offset_q;
     std::optional<double> awgn_power;
+    std::optional<double> amplitude_ripple_db;
+    std::optional<double> amplitude_ripple_freq_hz;
+    std::optional<double> delay_sec;
+    std::optional<double> burst_dropout_rate;
 };
 
 struct EmitterDef {

@@ -1,0 +1,58 @@
+{
+  "metadata": { "name": "am_fm_modulation" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 915000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 18.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "am1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 0.01,
+      "waveform": {
+        "type": "am",
+        "amplitude": 0.3,
+        "carrier_freq_hz": 0.0,
+        "mod_freq_hz": 1000.0,
+        "mod_depth": 0.8
+      }
+    },
+    {
+      "id": "fm1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.02,
+      "duration_sec": 0.01,
+      "waveform": {
+        "type": "fm",
+        "amplitude": 0.3,
+        "carrier_freq_hz": 0.0,
+        "mod_freq_hz": 1000.0,
+        "deviation_hz": 5000.0
+      }
+    },
+    {
+      "id": "pm1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.04,
+      "duration_sec": 0.01,
+      "waveform": {
+        "type": "pm",
+        "amplitude": 0.3,
+        "carrier_freq_hz": 0.0,
+        "mod_freq_hz": 1000.0,
+        "mod_index": 1.0
+      }
+    }
+  ]
+}

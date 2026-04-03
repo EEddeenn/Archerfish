@@ -18,4 +18,5 @@ target_link_libraries(archerfish_runtime
         archerfish_hal
         archerfish_dsp
         archerfish_scheduler
+        archerfish_impairments
 )

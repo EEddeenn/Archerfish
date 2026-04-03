@@ -271,3 +271,90 @@ target_link_libraries(test_run_directory
         Catch2::Catch2WithMain
 )
 add_test(NAME reporting_run_directory COMMAND test_run_directory)
+
+# --- Phase 2: Schema Validation ---
+
+add_executable(test_schema_validation test_schema_validation.cpp)
+target_compile_definitions(test_schema_validation PRIVATE EXAMPLES_DIR="${CMAKE_SOURCE_DIR}/examples")
+target_link_libraries(test_schema_validation
+    PRIVATE
+        archerfish_scheduler
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_schema_validation COMMAND test_schema_validation)
+
+# --- Phase 2: Resampler ---
+
+add_executable(test_resampler test_resampler.cpp)
+target_link_libraries(test_resampler
+    PRIVATE
+        archerfish_dsp
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_resampler COMMAND test_resampler)
+
+# --- Phase 2: New Waveform Sources ---
+
+add_executable(test_pulse_source test_pulse_source.cpp)
+target_link_libraries(test_pulse_source
+    PRIVATE
+        archerfish_dsp
+        Catch2::Catch2WithMain
+)
+add_test(NAME dsp_pulse_source COMMAND test_pulse_source)
+
+add_executable(test_ask_fsk_source test_ask_fsk_source.cpp)
+target_link_libraries(test_ask_fsk_source
+    PRIVATE
+        archerfish_dsp
+        Catch2::Catch2WithMain
+)
+add_test(NAME dsp_ask_fsk_source COMMAND test_ask_fsk_source)
+
+add_executable(test_am_fm_pm_source test_am_fm_pm_source.cpp)
+target_link_libraries(test_am_fm_pm_source
+    PRIVATE
+        archerfish_dsp
+        Catch2::Catch2WithMain
+)
+add_test(NAME dsp_am_fm_pm_source COMMAND test_am_fm_pm_source)
+
+# --- Phase 2: New Impairments ---
+
+add_executable(test_new_impairments test_new_impairments.cpp)
+target_link_libraries(test_new_impairments
+    PRIVATE
+        archerfish_impairments
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_new_impairments COMMAND test_new_impairments)
+
+# --- Phase 2: Sidecar Metadata ---
+
+add_executable(test_waveform_metadata_io test_waveform_metadata_io.cpp)
+target_link_libraries(test_waveform_metadata_io
+    PRIVATE
+        archerfish_dsp
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_waveform_metadata_io COMMAND test_waveform_metadata_io)
+
+# --- Phase 2: Reporting Improvements ---
+
+add_executable(test_emitter_metrics test_emitter_metrics.cpp)
+target_link_libraries(test_emitter_metrics
+    PRIVATE
+        archerfish_reporting
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_emitter_metrics COMMAND test_emitter_metrics)
+
+# --- Phase 2: Dry-Run ---
+
+add_executable(test_dryrun test_dryrun.cpp)
+target_link_libraries(test_dryrun
+    PRIVATE
+        archerfish_scheduler
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_dryrun COMMAND test_dryrun)

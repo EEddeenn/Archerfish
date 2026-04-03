@@ -9,20 +9,19 @@ cmake-build-*/
 *.swo
 *~
 
-# Conan
-conan_cache/
-CMakeUserPresets.json
-conanbuild.sh
-conanrun.sh
-conanrun.env
-conantoolchain.cmake
-
 # CMake generated
 .cmake/
 .cache/
+
+# FetchContent cache
+_deps/
 
 # Generated output
 *.cf32
 *.ci16
 *.ci8
 runs/
+
+# Python
+.ruff_cache/
+__pycache__/

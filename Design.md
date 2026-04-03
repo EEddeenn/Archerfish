@@ -3,8 +3,8 @@
 ## Comprehensive Design Specification
 ### CLI-First Programmable Vector Signal Generator for USRP
 
-Version: Draft 2  
-Status: Architecture / product / implementation specification
+Version: Draft 3  
+Status: MVP Implemented — Phase 2 Complete
 
 ---
 
@@ -43,6 +43,7 @@ Status: Architecture / product / implementation specification
 31. Coding-Agent Prompt  
 32. Open Questions  
 33. Final Notes
+34. Post-MVP Implementation Notes
 
 ---
 
@@ -125,12 +126,12 @@ Archerfish should be implemented as:
 
 - **Language:** C++23
 - **Build system:** CMake
-- **Package/dependency management:** Conan 2
+- **Package/dependency management:** Homebrew + FetchContent
 - **CLI framework:** CLI11
 - **Logging:** spdlog
 - **Formatting:** fmt
 - **JSON:** nlohmann/json
-- **JSON Schema validation:** json-schema-validator or equivalent
+- **JSON Schema validation:** pboettch/json-schema-validator (FetchContent)
 - **Testing:** Catch2
 - **Future RPC:** Protobuf + gRPC
 - **Optional scripting:** Python 3 with thin wrapper later
@@ -148,9 +149,8 @@ Python should be treated as a secondary scripting layer, not the core runtime.
 ## 3.3 Build and packaging principles
 
 - single top-level CMake project
-- reproducible dependency locking via Conan
-- Linux-first packaging
-- optional static linking only where practical
+- dependencies via Homebrew (macOS) / apt (Linux) + FetchContent
+- macOS-first + Linux CI
 - CI should build release and debug profiles
 
 ---
@@ -615,6 +615,18 @@ All waveforms should conform to a common conceptual rendering interface:
 - prepare
 - render block
 - report metadata
+- reset
+
+### 12.3.1 Implemented source interface (`ISource`)
+
+The implemented `ISource` abstract base class provides the following methods:
+- `configure(params)` — set waveform parameters from parsed scenario data
+- `prepare()` — precompute constants, build filters, run measurement pass
+- `render_block(buf, n)` — generate `n` complex samples into `buf`
+- `report_metadata()` — return waveform metadata (peak, RMS, crest factor, sample rate)
+- `reset()` — restore source to initial state, clearing filter tail and sample counters
+
+`ModulatorSource` (PSK/QAM) additionally exposes a `constellation()` const accessor for unit test verification of symbol-to-constellation mapping.
 
 ## 12.4 Sample format support
 
@@ -635,6 +647,10 @@ Each waveform should expose:
 - crest factor estimate where meaningful,
 - duration semantics,
 - repeat semantics.
+
+### 12.5.1 Calibrated peak/RMS metadata (implemented)
+
+Rather than using a hardcoded crest factor estimate, the implementation performs a 256-symbol measurement pass during `prepare()`. This renders 256 symbols of the modulated signal (without amplitude scaling) and measures the actual peak and RMS values. The measured peak/RMS are then stored and reported via `report_metadata()`, giving accurate crest factor values for each modulation order. CW, chirp, noise, and file sources use analytically known values where applicable.
 
 ## 12.6 Sample rate negotiation and resampling
 
@@ -658,6 +674,33 @@ The planner must record:
 - expected cost.
 
 Resampling is never implicit in a hidden way.
+
+## 12.7 Constellation mapping (implemented)
+
+### 12.7.1 Gray-coded constellations
+
+Digital modulation constellations (QPSK, 8-PSK, 16-QAM, 64-QAM) use Gray coding, following the conventions of liquid-dsp and GNU Radio. Adjacent constellation points differ by exactly one bit, minimizing bit error rate in additive noise.
+
+For QAM orders, the constellation is built on independent I and Q axes:
+- Each axis uses a Gray-coded PAM sub-constellation
+- A `gray_decode()` function converts Gray-coded indices to natural binary indices independently per axis
+- The two decoded axes are combined to form the complex symbol
+
+Normalization factors ensure unit average symbol energy:
+- 16-QAM: normalized with alpha = 1/sqrt(10)
+- 64-QAM: normalized with alpha = 1/sqrt(42)
+
+These factors are derived from the average power of the rectangular QAM grid before normalization.
+
+## 12.8 Pulse shaping and filter continuity (implemented)
+
+### 12.8.1 Root raised cosine (RRC) pulse shaper
+
+The RRC filter uses `constexpr kPi` instead of `M_PI` for Windows portability, ensuring the code compiles without relying on POSIX-defined math constants.
+
+### 12.8.2 Inter-batch filter continuity
+
+The modulator source uses an overlap-save scheme to maintain filter state across `render_block()` calls. A `filter_tail_` buffer preserves the trailing samples from the FIR impulse response between consecutive block renders. This prevents discontinuities at batch boundaries that would otherwise appear as spectral splatter or transient artifacts in the output signal.
 
 ---
 
@@ -1223,14 +1266,9 @@ Repository root is `archerfish/`. The earlier ambiguity is removed.
 ```text
 archerfish/
 ├── CMakeLists.txt
-├── conanfile.py
 ├── docs/
-│   ├── DESIGN.md
-│   ├── IMPLEMENTATION_GUIDE.md
-│   ├── CLI.md
-│   ├── SCENARIO_SCHEMA.md
-│   ├── CALIBRATION.md
-│   └── ARCHITECTURE_DECISIONS.md
+│   ├── Design.md
+│   └── plans/
 ├── schemas/
 │   └── scenario.schema.json
 ├── core/
@@ -1239,19 +1277,19 @@ archerfish/
 │   ├── dsp/
 │   ├── impairments/
 │   ├── scheduler/
-│   ├── calibration/
 │   ├── reporting/
 │   └── common/
 ├── cli/
 ├── examples/
-├── presets/
 ├── tests/
 │   ├── unit/
-│   ├── integration/
-│   └── hardware/
-├── tools/
-└── packaging/
+│   └── integration/
 ```
+
+**Notes on current state:**
+- `schemas/scenario.schema.json` exists and covers all Phase 1 and Phase 2 waveform types and impairments.
+- `presets/` directory has been removed; future preset templates will be added as needed.
+- `tools/` and `packaging/` directories are not present in the current codebase and are deferred to a later phase.
 
 ---
 
@@ -1415,21 +1453,30 @@ While Archerfish is a local engineering tool, it still benefits from:
 
 ## 28. Development Roadmap
 
-## Phase 1: CLI MVP
-- CLI skeleton
-- device enumeration
-- one-channel TX
-- CW, chirp, noise, QPSK/QAM, replay
-- parser, validator, planner
-- scenario run
-- reports and metrics
+## Phase 1: CLI MVP — DONE
+- [x] CLI skeleton
+- [x] device enumeration
+- [x] one-channel TX
+- [x] CW, chirp, noise, QPSK/QAM, replay
+- [x] parser, validator, planner
+- [x] scenario run
+- [x] reports and metrics
 
-## Phase 2: Better scene engine
-- multi-emitter composition
-- AWGN/CFO/IQ imbalance
-- wave gen / inspect commands
-- dry-run improvements
-- richer reports
+## Phase 2: Waveform expansion and schema validation — DONE
+- [x] JSON Schema file (`scenario.schema.json`) for formal scenario validation
+- [x] AM / FM / PM analog modulation sources
+- [x] ASK / FSK digital modulation sources
+- [x] Pulse and pulse train generators
+- [x] Resampler block for non-integer sample rate conversion (libsamplerate)
+- [x] Sidecar metadata JSON output from `wave gen`
+- [x] Enhanced impairments (amplitude ripple, delay, burst dropout)
+- [x] Reporting improvements (emitter metrics, `report show`)
+- [x] Scenario dry-run with ASCII timeline
+- [ ] APSK constellation support
+- [ ] OFDM-like synthesis
+- [ ] `calib init` / `calib show` / `calib import` commands
+- [ ] `schema print` command for dumping the scenario JSON Schema
+- [ ] multi-emitter composition with additive mixing
 
 ## Phase 3: Scheduling sophistication
 - timed retune
@@ -1457,18 +1504,18 @@ While Archerfish is a local engineering tool, it still benefits from:
 
 A valid MVP must support all of the following:
 
-1. `archerfish devices list`
-2. `archerfish devices info`
-3. `archerfish scenario validate`
-4. `archerfish scenario plan`
-5. `archerfish scenario run`
-6. CW future-start run
-7. Chirp burst run
-8. QPSK/QAM run
-9. IQ replay run
-10. Runtime metrics and saved report
+1. [x] `archerfish devices list`
+2. [x] `archerfish devices info`
+3. [x] `archerfish scenario validate`
+4. [x] `archerfish scenario plan`
+5. [x] `archerfish scenario run`
+6. [x] CW future-start run
+7. [x] Chirp burst run
+8. [x] QPSK/QAM run
+9. [x] IQ replay run
+10. [x] Runtime metrics and saved report
 
-If any of those are missing, it is not yet a real first release.
+All 10 items are implemented.
 
 ### MVP limits made explicit
 
@@ -1621,7 +1668,7 @@ Build a serious RF engineering tool that is:
 
 Implement:
 - CLI app named `archerfish`
-- C++23 + CMake + Conan stack
+- C++23 + CMake + Homebrew stack
 - USRP abstraction over UHD
 - one-device, one-channel TX
 - support for CW, multi-tone, chirp, noise, QPSK/QAM, and IQ replay
@@ -1713,10 +1760,12 @@ Think like you are building the backend of a real RF instrument, not a demo. Opt
 These are intentionally left as explicit future decisions rather than hidden ambiguity:
 
 1. Which resampler implementation should back the DSP layer in v1?
-2. Should v1 support one mixed overlapping-emitter path, or reject all overlap until Phase 2?
+2. ~~Should v1 support one mixed overlapping-emitter path, or reject all overlap until Phase 2?~~ **Resolved:** v1 rejects all overlap. The validator enforces non-overlapping emitter windows on a single channel.
 3. What exact waveform sidecar metadata format should `wave gen` emit?
 4. Which JSON schema validator library best balances strictness and maintenance burden?
 5. When remote API work begins, should gRPC be embedded in the same process or in a service wrapper?
+6. Should Phase 2 implement AM/FM/PM as source types (like ModulatorSource) or as impairment-like wrappers that modulate an existing source?
+7. What resampler architecture should be used for non-integer sample rate ratios? Options include polyphase FIR, rational resampler (interpolate-then-decimate), or an arbitrary resampler (e.g., polyphase with fractional phase accumulator).
 
 ---
 
@@ -1730,3 +1779,25 @@ If built well, it can later grow into:
 - a calibrated lab source,
 - a multi-channel coherent transmitter,
 - a remotely controlled RF instrument platform.
+
+---
+
+## 34. Post-MVP Implementation Notes
+
+This section documents implementation decisions made during Phase 1 that go beyond what was specified in the original design. These are now part of the implemented baseline.
+
+### 34.1 Gray-coded constellations
+
+The digital modulation constellations were implemented with Gray coding from the start, following liquid-dsp and GNU Radio conventions. This was not explicitly required in Draft 2 but was included as a correctness measure. Adjacent constellation points differ by exactly one bit, and QAM orders use independent per-axis Gray decoding.
+
+### 34.2 Overlap-save inter-batch filter continuity
+
+The ModulatorSource uses an overlap-save scheme to maintain FIR filter state across `render_block()` calls. A `filter_tail_` buffer preserves trailing filter samples between blocks, eliminating boundary artifacts. This is a signal integrity measure that prevents spectral splatter at block edges during long renders.
+
+### 34.3 Calibrated crest factor and RMS via measurement pass
+
+Rather than using a hardcoded peak-to-RMS ratio (such as sqrt(2)), the implementation runs a 256-symbol measurement pass during `prepare()` for modulated sources. This renders a representative segment of the modulated signal, measures actual peak and RMS values, and stores them for metadata reporting. The result is accurate crest factor values per modulation order rather than rough estimates.
+
+### 34.4 Windows portability (constexpr kPi)
+
+The RRC pulse shaper and other DSP blocks use `constexpr kPi` instead of the POSIX `M_PI` macro. This ensures the code compiles cleanly on MSVC and other Windows toolchains where `M_PI` is not defined by default. The constant is defined once and reused across the DSP layer.

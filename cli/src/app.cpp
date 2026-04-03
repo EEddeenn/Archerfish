@@ -3,6 +3,8 @@
 #include <archerfish/cli/cmd_scenario.hpp>
 #include <archerfish/cli/cmd_wave.hpp>
 #include <archerfish/cli/cmd_doctor.hpp>
+#include <archerfish/cli/cmd_report.hpp>
+#include <archerfish/cli/cmd_dryrun.hpp>
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
@@ -17,6 +19,7 @@ struct CommandRegistry {
     std::string file_path;
     std::string device_id;
     std::string output_path;
+    std::string run_id;
 
     double rate{0.0};
     double duration{0.0};
@@ -26,6 +29,18 @@ struct CommandRegistry {
     double symbol_rate{0.0};
     int sps{4};
     double rrc_alpha{0.35};
+
+    double frequency{0.0};
+    double pulse_width{1e-6};
+    double pri{10e-6};
+    int num_levels{2};
+    double center_freq{0.0};
+    int modulation_order{2};
+    double deviation{5000.0};
+    double carrier_freq{0.0};
+    double mod_freq{1000.0};
+    double mod_depth{0.5};
+    double mod_index{1.0};
 
     std::function<int()> execute;
 };
@@ -99,10 +114,90 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
     wave_gen_qpsk->add_option("-o,--output", reg->output_path, "Output file")->required();
     wave_gen_qpsk->callback([&opts, &r = *reg]() { return cmd_wave_gen_qpsk(opts, r.symbol_rate, r.sps, r.rrc_alpha, r.duration, r.amplitude, r.output_path); });
 
+    auto* wave_gen_pulse = wave_gen->add_subcommand("pulse", "Generate pulse waveform");
+    wave_gen_pulse->add_option("--rate", reg->rate, "Sample rate (Hz)")->required();
+    wave_gen_pulse->add_option("--duration", reg->duration, "Duration (seconds)")->required();
+    wave_gen_pulse->add_option("--amplitude", reg->amplitude, "Amplitude")->default_val("0.2");
+    wave_gen_pulse->add_option("--frequency", reg->frequency, "Center frequency (Hz)")->default_val("0");
+    wave_gen_pulse->add_option("--pulse-width", reg->pulse_width, "Pulse width (sec)")->default_val("1e-6");
+    wave_gen_pulse->add_option("--pri", reg->pri, "Pulse repetition interval (sec)")->default_val("10e-6");
+    wave_gen_pulse->add_option("-o,--output", reg->output_path, "Output file")->required();
+    wave_gen_pulse->callback([&opts, &r = *reg]() { return cmd_wave_gen_pulse(opts, r.rate, r.duration, r.amplitude, r.frequency, r.pulse_width, r.pri, r.output_path); });
+
+    auto* wave_gen_ask = wave_gen->add_subcommand("ask", "Generate ASK waveform");
+    wave_gen_ask->add_option("--rate", reg->rate, "Sample rate (Hz)")->required();
+    wave_gen_ask->add_option("--duration", reg->duration, "Duration (seconds)")->required();
+    wave_gen_ask->add_option("--amplitude", reg->amplitude, "Amplitude")->default_val("0.2");
+    wave_gen_ask->add_option("--frequency", reg->frequency, "Carrier frequency (Hz)")->default_val("0");
+    wave_gen_ask->add_option("--symbol-rate", reg->symbol_rate, "Symbol rate (Hz)")->default_val("1e6");
+    wave_gen_ask->add_option("--num-levels", reg->num_levels, "Number of amplitude levels")->default_val("2");
+    wave_gen_ask->add_option("-o,--output", reg->output_path, "Output file")->required();
+    wave_gen_ask->callback([&opts, &r = *reg]() { return cmd_wave_gen_ask(opts, r.rate, r.duration, r.amplitude, r.frequency, r.symbol_rate, r.num_levels, r.output_path); });
+
+    auto* wave_gen_fsk = wave_gen->add_subcommand("fsk", "Generate FSK waveform");
+    wave_gen_fsk->add_option("--rate", reg->rate, "Sample rate (Hz)")->required();
+    wave_gen_fsk->add_option("--duration", reg->duration, "Duration (seconds)")->required();
+    wave_gen_fsk->add_option("--amplitude", reg->amplitude, "Amplitude")->default_val("0.2");
+    wave_gen_fsk->add_option("--center-freq", reg->center_freq, "Center frequency (Hz)")->default_val("0");
+    wave_gen_fsk->add_option("--symbol-rate", reg->symbol_rate, "Symbol rate (Hz)")->default_val("1e6");
+    wave_gen_fsk->add_option("--modulation-order", reg->modulation_order, "Modulation order (M)")->default_val("2");
+    wave_gen_fsk->add_option("--deviation", reg->deviation, "Frequency deviation (Hz)")->default_val("5000");
+    wave_gen_fsk->add_option("-o,--output", reg->output_path, "Output file")->required();
+    wave_gen_fsk->callback([&opts, &r = *reg]() { return cmd_wave_gen_fsk(opts, r.rate, r.duration, r.amplitude, r.center_freq, r.symbol_rate, r.modulation_order, r.deviation, r.output_path); });
+
+    auto* wave_gen_am = wave_gen->add_subcommand("am", "Generate AM waveform");
+    wave_gen_am->add_option("--rate", reg->rate, "Sample rate (Hz)")->required();
+    wave_gen_am->add_option("--duration", reg->duration, "Duration (seconds)")->required();
+    wave_gen_am->add_option("--amplitude", reg->amplitude, "Amplitude")->default_val("0.2");
+    wave_gen_am->add_option("--carrier-freq", reg->carrier_freq, "Carrier frequency (Hz)")->default_val("0");
+    wave_gen_am->add_option("--mod-freq", reg->mod_freq, "Modulation frequency (Hz)")->default_val("1000");
+    wave_gen_am->add_option("--mod-depth", reg->mod_depth, "Modulation depth")->default_val("0.5");
+    wave_gen_am->add_option("-o,--output", reg->output_path, "Output file")->required();
+    wave_gen_am->callback([&opts, &r = *reg]() { return cmd_wave_gen_am(opts, r.rate, r.duration, r.amplitude, r.carrier_freq, r.mod_freq, r.mod_depth, r.output_path); });
+
+    auto* wave_gen_fm = wave_gen->add_subcommand("fm", "Generate FM waveform");
+    wave_gen_fm->add_option("--rate", reg->rate, "Sample rate (Hz)")->required();
+    wave_gen_fm->add_option("--duration", reg->duration, "Duration (seconds)")->required();
+    wave_gen_fm->add_option("--amplitude", reg->amplitude, "Amplitude")->default_val("0.2");
+    wave_gen_fm->add_option("--carrier-freq", reg->carrier_freq, "Carrier frequency (Hz)")->default_val("0");
+    wave_gen_fm->add_option("--mod-freq", reg->mod_freq, "Modulation frequency (Hz)")->default_val("1000");
+    wave_gen_fm->add_option("--deviation", reg->deviation, "Frequency deviation (Hz)")->default_val("5000");
+    wave_gen_fm->add_option("-o,--output", reg->output_path, "Output file")->required();
+    wave_gen_fm->callback([&opts, &r = *reg]() { return cmd_wave_gen_fm(opts, r.rate, r.duration, r.amplitude, r.carrier_freq, r.mod_freq, r.deviation, r.output_path); });
+
+    auto* wave_gen_pm = wave_gen->add_subcommand("pm", "Generate PM waveform");
+    wave_gen_pm->add_option("--rate", reg->rate, "Sample rate (Hz)")->required();
+    wave_gen_pm->add_option("--duration", reg->duration, "Duration (seconds)")->required();
+    wave_gen_pm->add_option("--amplitude", reg->amplitude, "Amplitude")->default_val("0.2");
+    wave_gen_pm->add_option("--carrier-freq", reg->carrier_freq, "Carrier frequency (Hz)")->default_val("0");
+    wave_gen_pm->add_option("--mod-freq", reg->mod_freq, "Modulation frequency (Hz)")->default_val("1000");
+    wave_gen_pm->add_option("--mod-index", reg->mod_index, "Modulation index")->default_val("1.0");
+    wave_gen_pm->add_option("-o,--output", reg->output_path, "Output file")->required();
+    wave_gen_pm->callback([&opts, &r = *reg]() { return cmd_wave_gen_pm(opts, r.rate, r.duration, r.amplitude, r.carrier_freq, r.mod_freq, r.mod_index, r.output_path); });
+
     auto* wave_inspect = wave->add_subcommand("inspect", "Inspect a waveform file");
     wave_inspect->add_option("file", reg->file_path, "Waveform file")->required()->check(CLI::ExistingFile);
     wave_inspect->add_flag("--json", opts.json_output, "Output as JSON");
     wave_inspect->callback([&opts, &r = *reg]() { return cmd_wave_inspect(opts, r.file_path); });
+
+    // --- report subcommand ---
+    auto* report = app->add_subcommand("report", "Report operations");
+
+    auto* report_show = report->add_subcommand("show", "Show a run report");
+    report_show->add_option("run_id", reg->run_id, "Run ID (partial match)")->required();
+    report_show->add_flag("--json", opts.json_output, "Output as JSON");
+    report_show->callback([&opts, &r = *reg]() { return cmd_report_show(opts, r.run_id); });
+
+    auto* report_export = report->add_subcommand("export", "Export per-emitter metrics");
+    report_export->add_option("run_id", reg->run_id, "Run ID (partial match)")->required();
+    report_export->add_option("-o,--output", reg->output_path, "Output file path (.csv or .json)")->required();
+    report_export->callback([&opts, &r = *reg]() { return cmd_metrics_export(opts, r.run_id, r.output_path); });
+
+    // --- dry-run subcommand ---
+    auto* dryrun_cmd = app->add_subcommand("dry-run", "Validate and visualize scenario without execution");
+    dryrun_cmd->add_option("file", reg->file_path, "Scenario JSON file")->required()->check(CLI::ExistingFile);
+    dryrun_cmd->add_flag("--json", opts.json_output, "Output as JSON");
+    dryrun_cmd->callback([&opts, &r = *reg]() { return cmd_dryrun(opts, r.file_path); });
 
     // --- version subcommand ---
     auto* version_cmd = app->add_subcommand("version", "Show version");

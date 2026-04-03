@@ -11,6 +11,22 @@
 #include "archerfish/dsp/modulator.hpp"
 #include "archerfish/dsp/multi_tone_source.hpp"
 #include "archerfish/dsp/noise_source.hpp"
+#include "archerfish/dsp/pulse_source.hpp"
+#include "archerfish/dsp/ask_source.hpp"
+#include "archerfish/dsp/fsk_source.hpp"
+#include "archerfish/dsp/am_source.hpp"
+#include "archerfish/dsp/fm_source.hpp"
+#include "archerfish/dsp/pm_source.hpp"
+
+#include "archerfish/impairments/impairment_chain.hpp"
+#include "archerfish/impairments/cfo.hpp"
+#include "archerfish/impairments/awgn.hpp"
+#include "archerfish/impairments/phase_offset.hpp"
+#include "archerfish/impairments/dc_offset.hpp"
+#include "archerfish/impairments/iq_imbalance.hpp"
+#include "archerfish/impairments/amplitude_ripple.hpp"
+#include "archerfish/impairments/delay.hpp"
+#include "archerfish/impairments/burst_dropout.hpp"
 
 namespace archerfish::runtime {
 
@@ -52,6 +68,34 @@ void RenderWorker::run() {
     source->configure(config);
     source->prepare();
 
+    // Build impairment chain once per job
+    std::optional<impairments::ImpairmentChain> chain;
+    if (job_.impairments.has_value()) {
+        auto& imp = *job_.impairments;
+        impairments::ImpairmentChain c;
+        if (imp.cfo_hz.has_value())
+            c.add(std::make_unique<impairments::CfoImpairment>(*imp.cfo_hz, job_.sample_rate));
+        if (imp.awgn_power.has_value())
+            c.add(std::make_unique<impairments::AwgnImpairment>(*imp.awgn_power));
+        if (imp.phase_offset_rad.has_value())
+            c.add(std::make_unique<impairments::PhaseOffsetImpairment>(*imp.phase_offset_rad));
+        if (imp.dc_offset_i.has_value() || imp.dc_offset_q.has_value())
+            c.add(std::make_unique<impairments::DcOffsetImpairment>(
+                imp.dc_offset_i.value_or(0.0), imp.dc_offset_q.value_or(0.0)));
+        if (imp.iq_gain_imbalance_db.has_value() || imp.iq_phase_imbalance_rad.has_value())
+            c.add(std::make_unique<impairments::IqImbalanceImpairment>(
+                imp.iq_gain_imbalance_db.value_or(0.0), imp.iq_phase_imbalance_rad.value_or(0.0)));
+        if (imp.amplitude_ripple_db.has_value())
+            c.add(std::make_unique<impairments::AmplitudeRippleImpairment>(
+                *imp.amplitude_ripple_db, imp.amplitude_ripple_freq_hz.value_or(1000.0), job_.sample_rate));
+        if (imp.delay_sec.has_value())
+            c.add(std::make_unique<impairments::DelayImpairment>(*imp.delay_sec, job_.sample_rate));
+        if (imp.burst_dropout_rate.has_value())
+            c.add(std::make_unique<impairments::BurstDropoutImpairment>(*imp.burst_dropout_rate));
+        if (c.size() > 0)
+            chain.emplace(std::move(c));
+    }
+
     size_t total_target = static_cast<size_t>(job_.sample_rate * job_.duration_sec);
     bool first_block = true;
 
@@ -64,6 +108,10 @@ void RenderWorker::run() {
 
         size_t produced = source->render_block(block.samples.data(), to_render);
         if (produced == 0) break;
+
+        if (chain.has_value()) {
+            chain->apply(block.samples.data(), produced);
+        }
 
         block.samples.resize(produced);
         block.start_of_burst = first_block;
@@ -103,6 +151,12 @@ std::unique_ptr<dsp::ISource> RenderWorker::create_source(const std::string& typ
     if (type == "qpsk" || type == "bpsk" || type == "8psk" || type == "qam16" || type == "qam64") {
         return std::make_unique<dsp::ModulatorSource>();
     }
+    if (type == "pulse") return std::make_unique<dsp::PulseSource>();
+    if (type == "ask") return std::make_unique<dsp::AskSource>();
+    if (type == "fsk") return std::make_unique<dsp::FskSource>();
+    if (type == "am") return std::make_unique<dsp::AmSource>();
+    if (type == "fm") return std::make_unique<dsp::FmSource>();
+    if (type == "pm") return std::make_unique<dsp::PmSource>();
     return nullptr;
 }
 

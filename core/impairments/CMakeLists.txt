@@ -5,6 +5,9 @@ add_library(archerfish_impairments STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/iq_imbalance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dc_offset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/impairment_chain.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/amplitude_ripple.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/delay.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/burst_dropout.cpp
 )
 
 target_include_directories(archerfish_impairments

@@ -1,0 +1,267 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://archerfish.dev/schemas/scenario.schema.json",
+  "title": "Archerfish Scenario",
+  "description": "Schema for Archerfish programmable vector signal generator scenario files",
+  "type": "object",
+  "required": ["metadata", "devices", "emitters"],
+  "additionalProperties": false,
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "description": "Scenario metadata and identification",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable scenario name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional scenario description"
+        },
+        "version": {
+          "type": "string",
+          "description": "Optional scenario version string"
+        }
+      }
+    },
+    "devices": {
+      "type": "array",
+      "description": "List of target device definitions",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/device"
+      }
+    },
+    "waveforms": {
+      "type": "array",
+      "description": "Reusable waveform definitions referenced by emitters",
+      "items": {
+        "$ref": "#/$defs/waveform"
+      }
+    },
+    "emitters": {
+      "type": "array",
+      "description": "List of signal emitters",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/emitter"
+      }
+    },
+    "reporting": {
+      "type": "object",
+      "description": "Reporting and output configuration",
+      "additionalProperties": false,
+      "properties": {
+        "save_plan": {
+          "type": "boolean",
+          "description": "Whether to save the execution plan",
+          "default": false
+        },
+        "save_metrics": {
+          "type": "boolean",
+          "description": "Whether to save execution metrics",
+          "default": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "rf_settings": {
+      "type": "object",
+      "description": "Radio frequency settings for a device",
+      "required": ["freq_hz", "rate_sps", "gain_db"],
+      "additionalProperties": false,
+      "properties": {
+        "freq_hz": {
+          "type": "number",
+          "description": "Center frequency in Hz",
+          "exclusiveMinimum": 0
+        },
+        "rate_sps": {
+          "type": "number",
+          "description": "Sample rate in samples per second",
+          "exclusiveMinimum": 0
+        },
+        "gain_db": {
+          "type": "number",
+          "description": "Transmit gain in dB"
+        },
+        "bandwidth_hz": {
+          "type": "number",
+          "description": "Analog bandwidth in Hz",
+          "exclusiveMinimum": 0
+        },
+        "antenna": {
+          "type": "string",
+          "description": "Antenna port selection"
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "description": "A target device definition",
+      "required": ["id", "rf"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique device identifier"
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Device channel index"
+        },
+        "rf": {
+          "$ref": "#/$defs/rf_settings"
+        }
+      }
+    },
+    "waveform": {
+      "type": "object",
+      "description": "A waveform definition (inline or top-level reusable)",
+      "required": ["type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique waveform identifier (required for top-level waveforms)"
+        },
+        "type": {
+          "type": "string",
+          "description": "Waveform type",
+          "enum": [
+            "cw",
+            "chirp",
+            "noise",
+            "qpsk",
+            "bpsk",
+            "8psk",
+            "qam16",
+            "qam64",
+            "multi_tone",
+            "file",
+            "pulse",
+            "ask",
+            "fsk",
+            "am",
+            "fm",
+            "pm"
+          ]
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": true
+    },
+    "impairments": {
+      "type": "object",
+      "description": "Channel impairment parameters",
+      "additionalProperties": false,
+      "properties": {
+        "cfo_hz": {
+          "type": "number",
+          "description": "Carrier frequency offset in Hz"
+        },
+        "phase_offset_rad": {
+          "type": "number",
+          "description": "Phase offset in radians"
+        },
+        "iq_gain_imbalance_db": {
+          "type": "number",
+          "description": "IQ gain imbalance in dB"
+        },
+        "iq_phase_imbalance_rad": {
+          "type": "number",
+          "description": "IQ phase imbalance in radians"
+        },
+        "dc_offset_i": {
+          "type": "number",
+          "description": "DC offset on I channel"
+        },
+        "dc_offset_q": {
+          "type": "number",
+          "description": "DC offset on Q channel"
+        },
+        "awgn_power": {
+          "type": "number",
+          "description": "Additive white Gaussian noise power"
+        },
+        "amplitude_ripple_depth": {
+          "type": "number",
+          "description": "Amplitude ripple depth"
+        },
+        "amplitude_ripple_freq_hz": {
+          "type": "number",
+          "description": "Amplitude ripple frequency in Hz"
+        },
+        "delay_sec": {
+          "type": "number",
+          "description": "Delay in seconds",
+          "minimum": 0
+        },
+        "burst_dropout_rate": {
+          "type": "number",
+          "description": "Burst dropout probability",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "burst_dropout_mean_burst_sec": {
+          "type": "number",
+          "description": "Mean burst dropout duration in seconds",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "emitter": {
+      "type": "object",
+      "description": "A signal emitter definition",
+      "required": ["id", "device"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique emitter identifier"
+        },
+        "device": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reference to a device ID"
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Channel index for this emitter",
+          "default": 0
+        },
+        "start_after_sec": {
+          "type": "number",
+          "description": "Delay before emission starts, in seconds",
+          "minimum": 0,
+          "default": 0
+        },
+        "duration_sec": {
+          "type": "number",
+          "description": "Emission duration in seconds",
+          "exclusiveMinimum": 0
+        },
+        "waveform": {
+          "$ref": "#/$defs/waveform",
+          "description": "Inline waveform definition"
+        },
+        "waveform_ref": {
+          "type": "string",
+          "description": "Reference to a top-level waveform by ID"
+        },
+        "impairments": {
+          "$ref": "#/$defs/impairments",
+          "description": "Optional channel impairments"
+        }
+      }
+    }
+  }
+}

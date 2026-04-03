@@ -8,6 +8,14 @@ add_library(archerfish_dsp STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/file_source.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/scaler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/summer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/pulse_source.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ask_source.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/fsk_source.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/am_source.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/fm_source.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/pm_source.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/resampler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/waveform_metadata_io.cpp
 )
 
 target_include_directories(archerfish_dsp
@@ -19,4 +27,6 @@ target_include_directories(archerfish_dsp
 target_link_libraries(archerfish_dsp
     PUBLIC
         archerfish_common
+    PRIVATE
+        SampleRate::samplerate
 )

@@ -4,6 +4,8 @@ add_library(archerfish_cli STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cmd_scenario.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cmd_wave.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cmd_doctor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cmd_report.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cmd_dryrun.cpp
 )
 
 target_include_directories(archerfish_cli
@@ -19,6 +21,7 @@ target_link_libraries(archerfish_cli
         archerfish_scheduler
         archerfish_runtime
         archerfish_dsp
+        archerfish_reporting
         CLI11::CLI11
         fmt::fmt
         spdlog::spdlog

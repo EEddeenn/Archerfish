@@ -4,24 +4,23 @@ CLI-first programmable vector signal generator for USRP.
 
 ## Prerequisites
 
-- C++23 compiler (GCC 13+, Clang 17+)
+- C++23 compiler (Clang 17+ or GCC 13+)
 - CMake 3.25+
-- Conan 2
+- Homebrew packages: fmt, spdlog, cli11, catch2, nlohmann-json, libsamplerate
 - UHD (optional — enables USRP hardware support)
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-conan profile detect --force
-conan install . --build=missing -s build_type=Release
+# Install dependencies (macOS)
+brew install fmt spdlog cli11 catch2 nlohmann-json libsamplerate
 
 # Configure and build
-cmake --preset conan-release
-cmake --build --preset conan-release
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
 # Run tests
-ctest --preset conan-release
+ctest --test-dir build --output-on-failure
 ```
 
 ## Usage
@@ -35,12 +34,19 @@ archerfish devices info --device usrp0
 archerfish scenario validate examples/future_start_cw.json
 archerfish scenario plan examples/future_start_cw.json
 archerfish scenario plan --json examples/chirp_burst.json
+archerfish scenario dry-run examples/future_start_cw.json
 archerfish scenario run examples/qpsk_burst.json
 
 # Waveform generation
 archerfish wave gen cw --rate 10e6 --duration 0.1 --amplitude 0.2 --output cw.cf32
 archerfish wave gen chirp --rate 20e6 --duration 0.01 --f0 -1000000 --f1 1000000 --amplitude 0.3 --output chirp.cf32
 archerfish wave gen qpsk --symbol-rate 1e6 --sps 8 --rrc 0.35 --duration 0.05 --amplitude 0.2 --output qpsk.cf32
+archerfish wave gen pulse --rate 10e6 --duration 0.1 --pulse-width 0.01 --pri 0.05 --amplitude 0.5 --output pulse.cf32
+archerfish wave gen ask --rate 10e6 --duration 0.1 --symbol-rate 1e6 --amplitude 0.3 --output ask.cf32
+archerfish wave gen fsk --rate 10e6 --duration 0.1 --symbol-rate 1e6 --deviation 500e3 --amplitude 0.3 --output fsk.cf32
+archerfish wave gen am --rate 10e6 --duration 0.1 --mod-freq 1e3 --mod-depth 0.5 --amplitude 0.3 --output am.cf32
+archerfish wave gen fm --rate 10e6 --duration 0.1 --mod-freq 1e3 --deviation 50e3 --amplitude 0.3 --output fm.cf32
+archerfish wave gen pm --rate 10e6 --duration 0.1 --mod-freq 1e3 --mod-index 0.5 --amplitude 0.3 --output pm.cf32
 
 # Waveform inspection
 archerfish wave inspect cw.cf32
@@ -49,6 +55,9 @@ archerfish wave inspect cw.cf32 --json
 # Diagnostics
 archerfish doctor
 archerfish version
+
+# Reports
+archerfish report show runs/latest/report.json
 ```
 
 ## Scenario Format
@@ -98,6 +107,12 @@ See `examples/` for complete scenarios (CW, chirp, QPSK, mixed scene).
 | `qam16`, `qam64` | `symbol_rate`, `samples_per_symbol`, `rrc_alpha`, `amplitude` |
 | `multi_tone` | `tones` (array of `{frequency_hz, amplitude}`) |
 | `file` | `path`, `loop` |
+| `pulse` | `pulse_width_sec`, `pri_sec`, `amplitude` |
+| `ask` | `symbol_rate`, `amplitude` |
+| `fsk` | `symbol_rate`, `deviation_hz`, `amplitude` |
+| `am` | `mod_freq_hz`, `mod_depth`, `amplitude` |
+| `fm` | `mod_freq_hz`, `deviation_hz`, `amplitude` |
+| `pm` | `mod_freq_hz`, `mod_index`, `amplitude` |
 
 ### Waveform references
 
@@ -127,7 +142,12 @@ Each emitter supports optional impairments:
     "iq_phase_imbalance_rad": 0.02,
     "dc_offset_i": 0.01,
     "dc_offset_q": -0.01,
-    "awgn_power": 0.001
+    "awgn_power": 0.001,
+    "amplitude_ripple_depth": 0.1,
+    "amplitude_ripple_freq_hz": 1000.0,
+    "delay_sec": 0.0001,
+    "burst_dropout_rate": 0.01,
+    "burst_dropout_mean_burst_sec": 0.001
   }
 }
 ```
@@ -173,18 +193,18 @@ For multi-emitter scenarios on one channel, emitters are executed sequentially (
 ## Testing
 
 ```bash
-# Full test suite (37 tests)
-ctest --preset conan-release --output-on-failure
+# Full test suite (47 tests)
+ctest --test-dir build --output-on-failure
 
 # Individual test binaries
-./build/Release/test_cw_source
-./build/Release/test_e2e_pipeline
+./build/test_cw_source
+./build/test_e2e_pipeline
 ```
 
 ## Installing
 
 ```bash
-cmake --install build/Release/generators/build/Release --prefix /usr/local
+cmake --install build --prefix /usr/local
 ```
 
 ## License

@@ -103,6 +103,7 @@ namespace archerfish::scenario {
         instr.duration_sec = emitter.duration_sec;
         instr.sample_rate = device.rf.rate_sps;
         instr.resample_ratio = std::nullopt;
+        instr.impairments = emitter.impairments;
         result.render_instructions.push_back(std::move(instr));
 
         double end_time = start + emitter.duration_sec;

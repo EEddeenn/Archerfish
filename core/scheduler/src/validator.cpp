@@ -15,7 +15,8 @@ using common::ErrorList;
 
 static const std::unordered_set<std::string> kValidWaveformTypes = {
     "cw", "chirp", "noise", "qpsk", "bpsk", "8psk",
-    "qam16", "qam64", "multi_tone", "file"};
+    "qam16", "qam64", "multi_tone", "file",
+    "pulse", "ask", "fsk", "am", "fm", "pm"};
 
 void check_unique_ids(const Scenario& scenario, ValidationResult& result) {
     std::unordered_set<std::string> device_ids;

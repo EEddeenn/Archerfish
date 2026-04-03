@@ -53,6 +53,7 @@ bool Runtime::arm() {
         job.duration_sec = instr.duration_sec;
         job.start_sec = instr.start_sec;
         job.block_size = config_.block_size;
+        job.impairments = instr.impairments;
         render_jobs_.push_back(std::move(job));
     }
 

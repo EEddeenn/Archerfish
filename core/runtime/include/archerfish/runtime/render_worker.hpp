@@ -10,6 +10,7 @@
 
 #include "archerfish/dsp/source.hpp"
 #include "archerfish/runtime/spsc_queue.hpp"
+#include "archerfish/scenario/scenario.hpp"
 
 namespace archerfish::runtime {
 
@@ -20,6 +21,7 @@ struct RenderJob {
     double duration_sec{0.0};
     double start_sec{0.0};
     size_t block_size{32768};
+    std::optional<scenario::ImpairmentSettings> impairments;
 };
 
 class RenderWorker {

@@ -1,0 +1,31 @@
+{
+  "metadata": { "name": "fsk_burst" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2400000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 15.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "fsk1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 0.01,
+      "waveform": {
+        "type": "fsk",
+        "amplitude": 0.3,
+        "carrier_freq_hz": 0.0,
+        "symbol_rate": 100000.0,
+        "deviation_hz": 50000.0,
+        "samples_per_symbol": 10
+      }
+    }
+  ]
+}

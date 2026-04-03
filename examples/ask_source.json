@@ -1,0 +1,31 @@
+{
+  "metadata": { "name": "ask_source" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2450000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 15.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "ask1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 0.01,
+      "waveform": {
+        "type": "ask",
+        "amplitude": 0.3,
+        "carrier_freq_hz": 0.0,
+        "num_levels": 4,
+        "symbol_rate": 100000.0,
+        "samples_per_symbol": 10
+      }
+    }
+  ]
+}

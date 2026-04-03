@@ -7,12 +7,36 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Homebrew dependencies
+        run: brew install fmt spdlog cli11 catch2 nlohmann-json libsamplerate
+
+      - name: Install UHD (optional)
+        run: brew install uhd || echo "UHD not available, building without USRP support"
+        continue-on-error: true
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Build
+        run: cmake --build build -j$(sysctl -n hw.ncpu)
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  build-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         build_type: [Release, Debug]
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,24 +44,19 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake python3-pip
-          # UHD is optional — install if available
+          sudo apt-get install -y build-essential cmake
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y libfmt-dev libspdlog-dev nlohmann-json3-dev libcatch2-3-dev || true
+          sudo apt-get install -y libsamplerate0-dev || true
           sudo apt-get install -y libuhd-dev || echo "UHD not available, building without USRP support"
 
-      - name: Install Conan
-        run: pip3 install conan
-
-      - name: Detect Conan profile
-        run: conan profile detect --force
-
-      - name: Install dependencies (${{ matrix.build_type }})
-        run: conan install . --build=missing -s build_type=${{ matrix.build_type }}
-
-      - name: Configure CMake
-        run: cmake --preset conan-${{ matrix.build_type == 'Release' && 'release' || 'debug' }}
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
       - name: Build
-        run: cmake --build --preset conan-${{ matrix.build_type == 'Release' && 'release' || 'debug' }}
+        run: cmake --build build -j$(nproc)
 
       - name: Test
-        run: ctest --preset conan-${{ matrix.build_type == 'Release' && 'release' || 'debug' }} --output-on-failure
+        run: ctest --test-dir build --output-on-failure
