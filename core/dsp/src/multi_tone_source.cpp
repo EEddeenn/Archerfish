@@ -4,6 +4,8 @@
 #include <cmath>
 #include <limits>
 
+#include "archerfish/common/constants.hpp"
+
 namespace archerfish::dsp {
 
 void MultiToneSource::configure(const nlohmann::json& params) {
@@ -42,7 +44,7 @@ size_t MultiToneSource::render_block(std::complex<float>* out, size_t max_sample
         float im = 0.0f;
         size_t n = samples_generated_ + i;
         for (const auto& tone : tones_) {
-            double phase = 2.0 * M_PI * tone.frequency_hz / sample_rate_ * static_cast<double>(n);
+            double phase = archerfish::constants::kTwoPi * tone.frequency_hz / sample_rate_ * static_cast<double>(n);
             float amp = static_cast<float>(tone.amplitude);
             re += amp * static_cast<float>(std::cos(phase));
             im += amp * static_cast<float>(std::sin(phase));

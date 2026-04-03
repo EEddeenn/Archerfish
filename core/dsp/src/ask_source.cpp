@@ -4,6 +4,8 @@
 #include <cmath>
 #include <limits>
 
+#include "archerfish/common/constants.hpp"
+
 namespace archerfish::dsp {
 
 void AskSource::configure(const nlohmann::json& params) {
@@ -26,7 +28,7 @@ void AskSource::configure(const nlohmann::json& params) {
 void AskSource::prepare() {
     samples_per_symbol_ = static_cast<size_t>(std::round(sample_rate_ / symbol_rate_));
     rng_.seed(seed_);
-    phase_ = 0.0f;
+    phase_ = 0.0;
     samples_generated_ = 0;
     samples_within_symbol_ = 0;
     generate_next_symbol();
@@ -61,12 +63,12 @@ size_t AskSource::render_block(std::complex<float>* out, size_t max_samples) {
 
     size_t to_generate = std::min(max_samples, total_available);
 
-    const float phase_inc = static_cast<float>(2.0 * M_PI * frequency_hz_ / sample_rate_);
-    const float two_pi = static_cast<float>(2.0 * M_PI);
+    const double phase_inc = archerfish::constants::kTwoPi * frequency_hz_ / sample_rate_;
+    const double two_pi = archerfish::constants::kTwoPi;
 
     for (size_t i = 0; i < to_generate; ++i) {
         float amp = current_symbol_value_;
-        out[i] = amp * std::complex<float>(std::cos(phase_), std::sin(phase_));
+        out[i] = amp * std::complex<float>(static_cast<float>(std::cos(phase_)), static_cast<float>(std::sin(phase_)));
 
         phase_ += phase_inc;
         if (phase_ > two_pi) phase_ -= two_pi;
@@ -110,7 +112,7 @@ WaveformMetadata AskSource::report_metadata() const {
 
 void AskSource::reset() {
     rng_.seed(seed_);
-    phase_ = 0.0f;
+    phase_ = 0.0;
     samples_generated_ = 0;
     samples_within_symbol_ = 0;
     generate_next_symbol();

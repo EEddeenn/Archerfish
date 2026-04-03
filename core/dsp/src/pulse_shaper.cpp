@@ -3,9 +3,9 @@
 #include <cmath>
 #include <vector>
 
-namespace {
+#include "archerfish/common/constants.hpp"
 
-constexpr double kPi = 3.14159265358979323846;
+namespace {
 
 } // namespace
 
@@ -21,14 +21,14 @@ std::vector<float> RrcFilterDesign::design() const {
         double t_norm = (static_cast<double>(i) - static_cast<double>(ntaps - 1) / 2.0) / static_cast<double>(samples_per_symbol);
 
         if (std::abs(t_norm) < 1e-10) {
-            taps[i] = static_cast<float>(1.0 + alpha * (4.0 / kPi - 1.0));
+            taps[i] = static_cast<float>(1.0 + alpha * (4.0 / archerfish::constants::kPi - 1.0));
         } else if (std::abs(std::abs(t_norm) - 1.0 / (4.0 * alpha)) < 1e-10) {
             double s = alpha / std::sqrt(2.0);
-            taps[i] = static_cast<float>(s * ((1.0 + 2.0 / kPi) * std::sin(kPi / (4.0 * alpha)) +
-                                               (1.0 - 2.0 / kPi) * std::cos(kPi / (4.0 * alpha))));
+            taps[i] = static_cast<float>(s * ((1.0 + 2.0 / archerfish::constants::kPi) * std::sin(archerfish::constants::kPi / (4.0 * alpha)) +
+                                               (1.0 - 2.0 / archerfish::constants::kPi) * std::cos(archerfish::constants::kPi / (4.0 * alpha))));
         } else {
-            double num = std::cos((1.0 + alpha) * kPi * t_norm) +
-                         std::sin((1.0 - alpha) * kPi * t_norm) / (4.0 * alpha * t_norm);
+            double num = std::cos((1.0 + alpha) * archerfish::constants::kPi * t_norm) +
+                         std::sin((1.0 - alpha) * archerfish::constants::kPi * t_norm) / (4.0 * alpha * t_norm);
             double denom = 1.0 - (16.0 * alpha * alpha * t_norm * t_norm);
             taps[i] = static_cast<float>(num / denom);
         }

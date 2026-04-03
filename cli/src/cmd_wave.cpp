@@ -1,15 +1,15 @@
-#include <archerfish/cli/cmd_wave.hpp>
-#include <archerfish/dsp/cw_source.hpp>
-#include <archerfish/dsp/chirp_source.hpp>
-#include <archerfish/dsp/modulator.hpp>
-#include <archerfish/dsp/pulse_source.hpp>
-#include <archerfish/dsp/ask_source.hpp>
-#include <archerfish/dsp/fsk_source.hpp>
-#include <archerfish/dsp/am_source.hpp>
-#include <archerfish/dsp/fm_source.hpp>
-#include <archerfish/dsp/pm_source.hpp>
-#include <archerfish/dsp/waveform_metadata_io.hpp>
-#include <archerfish/common/sample.hpp>
+#include "archerfish/cli/cmd_wave.hpp"
+#include "archerfish/dsp/cw_source.hpp"
+#include "archerfish/dsp/chirp_source.hpp"
+#include "archerfish/dsp/modulator.hpp"
+#include "archerfish/dsp/pulse_source.hpp"
+#include "archerfish/dsp/ask_source.hpp"
+#include "archerfish/dsp/fsk_source.hpp"
+#include "archerfish/dsp/am_source.hpp"
+#include "archerfish/dsp/fm_source.hpp"
+#include "archerfish/dsp/pm_source.hpp"
+#include "archerfish/dsp/waveform_metadata_io.hpp"
+#include "archerfish/common/sample.hpp"
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>

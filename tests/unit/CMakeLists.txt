@@ -33,6 +33,7 @@ add_executable(test_rf_types test_rf_types.cpp)
 target_link_libraries(test_rf_types
     PRIVATE
         archerfish_common
+        archerfish_scheduler
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_rf_types COMMAND test_rf_types)

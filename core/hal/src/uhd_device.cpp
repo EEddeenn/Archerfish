@@ -1,6 +1,6 @@
 #ifdef ARCHERFISH_HAS_UHD
 
-#include <archerfish/hal/uhd_device.hpp>
+#include "archerfish/hal/uhd_device.hpp"
 
 #include <spdlog/spdlog.h>
 

@@ -13,10 +13,8 @@ function(add_e2e_test test_name test_source)
     target_compile_definitions(${test_name} PRIVATE EXAMPLES_DIR="${CMAKE_SOURCE_DIR}/examples")
     target_link_libraries(${test_name}
         PRIVATE
-            archerfish_scheduler
+            # archerfish_runtime brings: common, hal, dsp, scheduler, impairments
             archerfish_runtime
-            archerfish_hal
-            archerfish_dsp
             archerfish_reporting
             Catch2::Catch2WithMain
     )

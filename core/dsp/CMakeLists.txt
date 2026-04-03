@@ -16,6 +16,7 @@ add_library(archerfish_dsp STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pm_source.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/resampler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/waveform_metadata_io.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/source_factory.cpp
 )
 
 target_include_directories(archerfish_dsp

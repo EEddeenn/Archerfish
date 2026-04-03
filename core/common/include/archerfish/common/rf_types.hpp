@@ -8,16 +8,6 @@
 
 namespace archerfish::common {
 
-struct RfConfig {
-    double freq_hz{0.0};
-    double rate_sps{0.0};
-    double gain_db{0.0};
-    std::optional<double> bandwidth_hz;
-    std::optional<std::string> antenna;
-
-    [[nodiscard]] ErrorList validate() const;
-};
-
 struct TimeSpec {
     int64_t seconds{0};
     double fractional_ns{0.0};

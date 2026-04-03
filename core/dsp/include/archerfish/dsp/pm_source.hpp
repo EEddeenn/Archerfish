@@ -27,7 +27,7 @@ private:
     std::optional<double> duration_sec_;
 
     float carrier_phase_{0.0f};
-    size_t sample_index_{0};
+    size_t samples_produced_{0};
 };
 
 } // namespace archerfish::dsp

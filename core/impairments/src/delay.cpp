@@ -26,14 +26,6 @@ std::string DelayImpairment::name() const {
     return "delay";
 }
 
-bool DelayImpairment::enabled() const {
-    return enabled_;
-}
-
-void DelayImpairment::set_enabled(bool v) {
-    enabled_ = v;
-}
-
 void DelayImpairment::reset() {
     buffer_.clear();
     buffer_.assign(delay_samples_, std::complex<float>(0.0f, 0.0f));

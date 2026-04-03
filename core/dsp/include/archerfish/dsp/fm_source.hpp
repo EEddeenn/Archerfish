@@ -27,7 +27,7 @@ private:
     std::optional<double> duration_sec_;
 
     double phase_{0.0};
-    size_t sample_index_{0};
+    size_t samples_produced_{0};
 };
 
 } // namespace archerfish::dsp

@@ -25,12 +25,4 @@ std::string PhaseOffsetImpairment::name() const {
     return "phase_offset";
 }
 
-bool PhaseOffsetImpairment::enabled() const {
-    return enabled_;
-}
-
-void PhaseOffsetImpairment::set_enabled(bool v) {
-    enabled_ = v;
-}
-
 } // namespace archerfish::impairments

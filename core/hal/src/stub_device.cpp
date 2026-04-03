@@ -1,4 +1,4 @@
-#include <archerfish/hal/stub_device.hpp>
+#include "archerfish/hal/stub_device.hpp"
 
 namespace archerfish::hal {
 

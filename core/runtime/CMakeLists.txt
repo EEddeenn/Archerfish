@@ -14,7 +14,6 @@ target_include_directories(archerfish_runtime
 
 target_link_libraries(archerfish_runtime
     PUBLIC
-        archerfish_common
         archerfish_hal
         archerfish_dsp
         archerfish_scheduler

@@ -36,62 +36,6 @@ std::string make_timestamp() {
     return buf;
 }
 
-nlohmann::json metadata_to_json(const scenario::Metadata& m) {
-    nlohmann::json j;
-    j["name"] = m.name;
-    if (m.description.has_value()) j["description"] = *m.description;
-    if (m.version.has_value()) j["version"] = *m.version;
-    return j;
-}
-
-nlohmann::json rf_settings_to_json(const scenario::RfSettings& rf) {
-    nlohmann::json j;
-    j["freq_hz"] = rf.freq_hz;
-    j["rate_sps"] = rf.rate_sps;
-    j["gain_db"] = rf.gain_db;
-    if (rf.bandwidth_hz.has_value()) j["bandwidth_hz"] = *rf.bandwidth_hz;
-    if (rf.antenna.has_value()) j["antenna"] = *rf.antenna;
-    return j;
-}
-
-nlohmann::json device_def_to_json(const scenario::DeviceDef& d) {
-    nlohmann::json j;
-    j["id"] = d.id;
-    if (d.channel.has_value()) j["channel"] = *d.channel;
-    j["rf"] = rf_settings_to_json(d.rf);
-    return j;
-}
-
-nlohmann::json waveform_def_to_json(const scenario::WaveformDef& wf) {
-    nlohmann::json j;
-    if (wf.id.has_value()) j["id"] = *wf.id;
-    j["type"] = wf.type;
-    j["params"] = wf.params;
-    return j;
-}
-
-nlohmann::json emitter_def_to_json(const scenario::EmitterDef& e) {
-    nlohmann::json j;
-    j["id"] = e.id;
-    j["device"] = e.device;
-    j["channel"] = e.channel;
-    j["start_after_sec"] = e.start_after_sec;
-    j["duration_sec"] = e.duration_sec;
-    if (e.waveform.has_value()) j["waveform"] = waveform_def_to_json(*e.waveform);
-    if (e.waveform_ref.has_value()) j["waveform_ref"] = *e.waveform_ref;
-    return j;
-}
-
-nlohmann::json scenario_to_json(const scenario::Scenario& s) {
-    nlohmann::json j;
-    j["metadata"] = metadata_to_json(s.metadata);
-    for (const auto& d : s.devices) j["devices"].push_back(device_def_to_json(d));
-    for (const auto& w : s.waveforms) j["waveforms"].push_back(waveform_def_to_json(w));
-    for (const auto& e : s.emitters) j["emitters"].push_back(emitter_def_to_json(e));
-    j["reporting"] = nlohmann::json{{"save_plan", s.reporting.save_plan}, {"save_metrics", s.reporting.save_metrics}};
-    return j;
-}
-
 void write_json_file(const std::filesystem::path& p, const nlohmann::json& j) {
     std::ofstream f(p);
     f << j.dump(2) << std::endl;
@@ -113,7 +57,7 @@ const std::filesystem::path& RunDirectory::path() const {
 }
 
 void RunDirectory::save_scenario(const scenario::Scenario& scenario) {
-    write_json_file(scenario_path(), scenario_to_json(scenario));
+    write_json_file(scenario_path(), scenario::scenario_to_json(scenario));
 }
 
 void RunDirectory::save_plan(const scenario::Plan& plan) {

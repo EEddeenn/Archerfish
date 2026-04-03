@@ -92,7 +92,7 @@ TEST_CASE("Runtime configures device RF settings from plan", "[integration][runt
     instr.sample_rate = 10e6;
     plan.render_instructions.push_back(instr);
 
-    rt.prepare(plan);
+    REQUIRE(rt.prepare(plan));
 
     const auto& history = device->call_history();
     bool found_freq = false;
@@ -122,8 +122,8 @@ TEST_CASE("Runtime abort transitions correctly", "[integration][runtime]") {
     instr.sample_rate = 1e6;
     plan.render_instructions.push_back(instr);
 
-    rt.prepare(plan);
-    rt.arm();
+    REQUIRE(rt.prepare(plan));
+    REQUIRE(rt.arm());
 
     rt.abort();
     REQUIRE(rt.state() == RuntimeState::Aborted);

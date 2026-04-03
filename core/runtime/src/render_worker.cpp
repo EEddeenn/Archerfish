@@ -5,18 +5,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "archerfish/dsp/chirp_source.hpp"
-#include "archerfish/dsp/cw_source.hpp"
-#include "archerfish/dsp/file_source.hpp"
-#include "archerfish/dsp/modulator.hpp"
-#include "archerfish/dsp/multi_tone_source.hpp"
-#include "archerfish/dsp/noise_source.hpp"
-#include "archerfish/dsp/pulse_source.hpp"
-#include "archerfish/dsp/ask_source.hpp"
-#include "archerfish/dsp/fsk_source.hpp"
-#include "archerfish/dsp/am_source.hpp"
-#include "archerfish/dsp/fm_source.hpp"
-#include "archerfish/dsp/pm_source.hpp"
+#include "archerfish/dsp/source_factory.hpp"
 
 #include "archerfish/impairments/impairment_chain.hpp"
 #include "archerfish/impairments/cfo.hpp"
@@ -143,21 +132,7 @@ void RenderWorker::run() {
 }
 
 std::unique_ptr<dsp::ISource> RenderWorker::create_source(const std::string& type) {
-    if (type == "cw") return std::make_unique<dsp::CwSource>();
-    if (type == "chirp") return std::make_unique<dsp::ChirpSource>();
-    if (type == "noise") return std::make_unique<dsp::NoiseSource>();
-    if (type == "multi_tone") return std::make_unique<dsp::MultiToneSource>();
-    if (type == "file") return std::make_unique<dsp::FileSource>();
-    if (type == "qpsk" || type == "bpsk" || type == "8psk" || type == "qam16" || type == "qam64") {
-        return std::make_unique<dsp::ModulatorSource>();
-    }
-    if (type == "pulse") return std::make_unique<dsp::PulseSource>();
-    if (type == "ask") return std::make_unique<dsp::AskSource>();
-    if (type == "fsk") return std::make_unique<dsp::FskSource>();
-    if (type == "am") return std::make_unique<dsp::AmSource>();
-    if (type == "fm") return std::make_unique<dsp::FmSource>();
-    if (type == "pm") return std::make_unique<dsp::PmSource>();
-    return nullptr;
+    return dsp::create_source(type);
 }
 
 } // namespace archerfish::runtime

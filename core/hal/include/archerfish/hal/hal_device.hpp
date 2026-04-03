@@ -1,7 +1,7 @@
 #pragma once
 
-#include <archerfish/hal/device_capabilities.hpp>
-#include <archerfish/hal/tx_metadata.hpp>
+#include "archerfish/hal/device_capabilities.hpp"
+#include "archerfish/hal/tx_metadata.hpp"
 
 #include <complex>
 #include <cstdint>

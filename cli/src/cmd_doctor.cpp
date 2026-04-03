@@ -1,4 +1,4 @@
-#include <archerfish/cli/cmd_doctor.hpp>
+#include "archerfish/cli/cmd_doctor.hpp"
 
 #include <fmt/format.h>
 

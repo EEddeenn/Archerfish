@@ -28,6 +28,8 @@ std::expected<TimelineEventType, common::ErrorList> string_to_timeline_event_typ
     });
 }
 
+} // namespace
+
 nlohmann::json rf_settings_to_json(const RfSettings& rf) {
     nlohmann::json j;
     j["freq_hz"] = rf.freq_hz;
@@ -197,8 +199,6 @@ common::Error error_from_json(const nlohmann::json& j) {
     err.message = j.value("message", "");
     return err;
 }
-
-} // namespace
 
 nlohmann::json plan_to_json(const Plan& plan) {
     nlohmann::json j;

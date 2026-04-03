@@ -1,6 +1,7 @@
-#include <archerfish/cli/cmd_report.hpp>
-#include <archerfish/reporting/report.hpp>
-#include <archerfish/reporting/emitter_metrics.hpp>
+#include "archerfish/cli/cmd_report.hpp"
+#include "archerfish/cli/format.hpp"
+#include "archerfish/reporting/report.hpp"
+#include "archerfish/reporting/emitter_metrics.hpp"
 
 #include <expected>
 #include <filesystem>
@@ -40,19 +41,6 @@ std::expected<nlohmann::json, std::string> load_report_json(const std::string& r
     }
 
     return std::unexpected(fmt::format("Run '{}' not found", run_id));
-}
-
-std::string format_freq(double hz) {
-    if (hz >= 1e9) return fmt::format("{:.1f} GHz", hz / 1e9);
-    if (hz >= 1e6) return fmt::format("{:.1f} MHz", hz / 1e6);
-    if (hz >= 1e3) return fmt::format("{:.1f} kHz", hz / 1e3);
-    return fmt::format("{:.0f} Hz", hz);
-}
-
-std::string format_rate(double sps) {
-    if (sps >= 1e6) return fmt::format("{:.0f} MSps", sps / 1e6);
-    if (sps >= 1e3) return fmt::format("{:.0f} kSps", sps / 1e3);
-    return fmt::format("{:.0f} Sps", sps);
 }
 
 } // namespace

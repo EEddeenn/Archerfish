@@ -11,13 +11,10 @@ public:
 
     void apply(std::complex<float>* data, size_t count) override;
     std::string name() const override;
-    bool enabled() const override;
-    void set_enabled(bool v) override;
 
 private:
     double gain_imbalance_db_;
     double phase_imbalance_rad_;
-    bool enabled_{true};
 };
 
 } // namespace archerfish::impairments

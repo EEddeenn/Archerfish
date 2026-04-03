@@ -1,6 +1,6 @@
 #pragma once
 
-#include <archerfish/hal/hal_device.hpp>
+#include "archerfish/hal/hal_device.hpp"
 
 #include <string>
 #include <string_view>

@@ -1,5 +1,5 @@
-#include <archerfish/cli/cmd_devices.hpp>
-#include <archerfish/hal/hal_factory.hpp>
+#include "archerfish/cli/cmd_devices.hpp"
+#include "archerfish/hal/hal_factory.hpp"
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>

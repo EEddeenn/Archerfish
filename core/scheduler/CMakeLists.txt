@@ -1,4 +1,5 @@
 add_library(archerfish_scheduler STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scenario.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/parser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/validator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/planner.cpp

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <archerfish/hal/device_capabilities.hpp>
-#include <archerfish/hal/hal_device.hpp>
+#include "archerfish/hal/device_capabilities.hpp"
+#include "archerfish/hal/hal_device.hpp"
 
 #include <memory>
 #include <string>

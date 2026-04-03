@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 
 #include "archerfish/hal/hal_device.hpp"
 #include "archerfish/runtime/render_worker.hpp"
@@ -47,7 +48,8 @@ private:
     StateMachine state_machine_;
     std::unique_ptr<SampleQueue> queue_;
     std::vector<RenderJob> render_jobs_;
-    TxWorker* active_tx_worker_{nullptr};
+    std::unique_ptr<TxWorker> active_tx_worker_;
+    std::mutex active_tx_worker_mutex_;
     RunMetrics metrics_;
     scenario::Plan current_plan_;
 };

@@ -27,12 +27,4 @@ std::string AwgnImpairment::name() const {
     return "awgn";
 }
 
-bool AwgnImpairment::enabled() const {
-    return enabled_;
-}
-
-void AwgnImpairment::set_enabled(bool v) {
-    enabled_ = v;
-}
-
 } // namespace archerfish::impairments

@@ -4,6 +4,8 @@
 #include <cmath>
 #include <limits>
 
+#include "archerfish/common/constants.hpp"
+
 namespace archerfish::dsp {
 
 void FmSource::configure(const nlohmann::json& params) {
@@ -23,34 +25,34 @@ void FmSource::configure(const nlohmann::json& params) {
 
 void FmSource::prepare() {
     phase_ = 0.0;
-    sample_index_ = 0;
+    samples_produced_ = 0;
 }
 
 size_t FmSource::render_block(std::complex<float>* out, size_t max_samples) {
     size_t to_generate = max_samples;
     if (duration_sec_.has_value()) {
         size_t total_samples = static_cast<size_t>(std::round(duration_sec_.value() * sample_rate_));
-        if (sample_index_ >= total_samples)
+        if (samples_produced_ >= total_samples)
             return 0;
-        to_generate = std::min(max_samples, total_samples - sample_index_);
+        to_generate = std::min(max_samples, total_samples - samples_produced_);
     }
 
-    const double carrier_incr = 2.0 * M_PI * carrier_freq_hz_ / sample_rate_;
-    const double mod_incr = 2.0 * M_PI * mod_freq_hz_ / sample_rate_;
-    const double sensitivity = 2.0 * M_PI * deviation_hz_ / sample_rate_;
+    const double carrier_incr = archerfish::constants::kTwoPi * carrier_freq_hz_ / sample_rate_;
+    const double mod_incr = archerfish::constants::kTwoPi * mod_freq_hz_ / sample_rate_;
+    const double sensitivity = archerfish::constants::kTwoPi * deviation_hz_ / sample_rate_;
     const float amp = static_cast<float>(amplitude_);
 
     for (size_t i = 0; i < to_generate; ++i) {
-        double mod_signal = std::cos(mod_incr * static_cast<double>(sample_index_));
+        double mod_signal = std::cos(mod_incr * static_cast<double>(samples_produced_));
         phase_ += carrier_incr + sensitivity * mod_signal;
 
         // Wrap phase to [-π, π) — GNU Radio pattern
-        phase_ = std::fmod(phase_ + M_PI, 2.0 * M_PI) - M_PI;
+        phase_ = std::fmod(phase_ + archerfish::constants::kPi, archerfish::constants::kTwoPi) - archerfish::constants::kPi;
 
         out[i] = amp * std::complex<float>(static_cast<float>(std::cos(phase_)),
                                             static_cast<float>(std::sin(phase_)));
 
-        sample_index_++;
+        samples_produced_++;
     }
 
     return to_generate;
@@ -71,7 +73,7 @@ WaveformMetadata FmSource::report_metadata() const {
 
 void FmSource::reset() {
     phase_ = 0.0;
-    sample_index_ = 0;
+    samples_produced_ = 0;
 }
 
 } // namespace archerfish::dsp

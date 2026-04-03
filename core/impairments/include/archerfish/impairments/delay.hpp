@@ -13,14 +13,11 @@ public:
 
     void apply(std::complex<float>* data, size_t count) override;
     std::string name() const override;
-    bool enabled() const override;
-    void set_enabled(bool v) override;
 
     void reset();
 
 private:
     size_t delay_samples_;
-    bool enabled_{true};
     std::deque<std::complex<float>> buffer_;
 };
 

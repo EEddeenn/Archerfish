@@ -14,13 +14,10 @@ public:
 
     void apply(std::complex<float>* data, size_t count) override;
     std::string name() const override;
-    bool enabled() const override;
-    void set_enabled(bool v) override;
 
 private:
     double dropout_rate_;
     double mean_burst_len_;
-    bool enabled_{true};
     std::mt19937 rng_;
     std::bernoulli_distribution burst_start_dist_;
     std::uniform_int_distribution<size_t> burst_len_dist_;

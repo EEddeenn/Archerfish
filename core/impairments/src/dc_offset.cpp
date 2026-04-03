@@ -23,12 +23,4 @@ std::string DcOffsetImpairment::name() const {
     return "dc_offset";
 }
 
-bool DcOffsetImpairment::enabled() const {
-    return enabled_;
-}
-
-void DcOffsetImpairment::set_enabled(bool v) {
-    enabled_ = v;
-}
-
 } // namespace archerfish::impairments

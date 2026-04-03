@@ -2,12 +2,14 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include "archerfish/common/rf_types.hpp"
+#include "archerfish/scenario/scenario.hpp"
 
 using namespace archerfish::common;
+using namespace archerfish::scenario;
 using Catch::Matchers::WithinAbs;
 
-TEST_CASE("RfConfig default values", "[common][rf]") {
-    RfConfig cfg;
+TEST_CASE("RfSettings default values", "[common][rf]") {
+    RfSettings cfg;
     CHECK(cfg.freq_hz == 0.0);
     CHECK(cfg.rate_sps == 0.0);
     CHECK(cfg.gain_db == 0.0);
@@ -15,8 +17,8 @@ TEST_CASE("RfConfig default values", "[common][rf]") {
     CHECK_FALSE(cfg.antenna.has_value());
 }
 
-TEST_CASE("RfConfig validation: freq must be positive", "[common][rf]") {
-    RfConfig cfg;
+TEST_CASE("RfSettings validation: freq must be positive", "[common][rf]") {
+    RfSettings cfg;
     cfg.freq_hz = -1.0;
     cfg.rate_sps = 1e6;
     auto errors = cfg.validate();
@@ -24,8 +26,8 @@ TEST_CASE("RfConfig validation: freq must be positive", "[common][rf]") {
     CHECK(errors[0].code == "E_RF_INVALID_FREQ");
 }
 
-TEST_CASE("RfConfig validation: rate must be positive", "[common][rf]") {
-    RfConfig cfg;
+TEST_CASE("RfSettings validation: rate must be positive", "[common][rf]") {
+    RfSettings cfg;
     cfg.freq_hz = 1e9;
     cfg.rate_sps = 0.0;
     auto errors = cfg.validate();
@@ -37,8 +39,8 @@ TEST_CASE("RfConfig validation: rate must be positive", "[common][rf]") {
     CHECK(found);
 }
 
-TEST_CASE("RfConfig validation: valid config produces no errors", "[common][rf]") {
-    RfConfig cfg;
+TEST_CASE("RfSettings validation: valid config produces no errors", "[common][rf]") {
+    RfSettings cfg;
     cfg.freq_hz = 2.4e9;
     cfg.rate_sps = 20e6;
     cfg.gain_db = 20.0;
@@ -46,8 +48,8 @@ TEST_CASE("RfConfig validation: valid config produces no errors", "[common][rf]"
     CHECK(errors.empty());
 }
 
-TEST_CASE("RfConfig validation: gain out of range", "[common][rf]") {
-    RfConfig cfg;
+TEST_CASE("RfSettings validation: gain out of range", "[common][rf]") {
+    RfSettings cfg;
     cfg.freq_hz = 1e9;
     cfg.rate_sps = 1e6;
     cfg.gain_db = 200.0;
@@ -56,8 +58,8 @@ TEST_CASE("RfConfig validation: gain out of range", "[common][rf]") {
     CHECK(errors[0].code == "E_RF_INVALID_GAIN");
 }
 
-TEST_CASE("RfConfig validation: bandwidth must be positive", "[common][rf]") {
-    RfConfig cfg;
+TEST_CASE("RfSettings validation: bandwidth must be positive", "[common][rf]") {
+    RfSettings cfg;
     cfg.freq_hz = 1e9;
     cfg.rate_sps = 1e6;
     cfg.bandwidth_hz = -5.0;

@@ -5,9 +5,9 @@
 #include <cmath>
 #include <numeric>
 
-namespace {
+#include "archerfish/common/constants.hpp"
 
-constexpr double kPi = 3.14159265358979323846;
+namespace {
 
 // Gray decode: convert Gray-coded index to natural binary position
 // Reference: liquid-dsp modem_utilities.c
@@ -48,7 +48,7 @@ void ModulatorSource::build_constellation() {
         // Gray-coded 8-PSK
         // Reference: GNU Radio gr-digital constellation.cc constellation_8psk
         // Angles chosen so adjacent phase states differ by exactly 1 bit
-        float a = static_cast<float>(kPi) / 8.0f;
+        float a = static_cast<float>(archerfish::constants::kPi) / 8.0f;
         int angles[] = {1, 7, 15, 9, 3, 5, 13, 11};
         for (int k = 0; k < 8; ++k) {
             float theta = angles[k] * a;

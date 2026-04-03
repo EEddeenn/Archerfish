@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "archerfish/common/constants.hpp"
+
 namespace archerfish::dsp {
 
 void ChirpSource::configure(const nlohmann::json& params) {
@@ -40,7 +42,7 @@ size_t ChirpSource::render_block(std::complex<float>* out, size_t max_samples) {
 
     for (size_t i = 0; i < to_generate; ++i) {
         double t = static_cast<double>(samples_generated_ + i) * ts;
-        double phase = 2.0 * M_PI * (f0_hz_ * t + freq_slope * t * t / 2.0);
+        double phase = archerfish::constants::kTwoPi * (f0_hz_ * t + freq_slope * t * t / 2.0);
         float cos_p = static_cast<float>(std::cos(phase));
         float sin_p = static_cast<float>(std::sin(phase));
         out[i] = amp * std::complex<float>(cos_p, sin_p);

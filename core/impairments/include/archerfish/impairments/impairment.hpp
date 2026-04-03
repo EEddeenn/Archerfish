@@ -11,8 +11,12 @@ public:
     virtual ~IImpairment() = default;
     virtual void apply(std::complex<float>* data, size_t count) = 0;
     virtual std::string name() const = 0;
-    virtual bool enabled() const = 0;
-    virtual void set_enabled(bool v) = 0;
+
+    bool enabled() const { return enabled_; }
+    void set_enabled(bool v) { enabled_ = v; }
+
+protected:
+    bool enabled_{true};
 };
 
 } // namespace archerfish::impairments

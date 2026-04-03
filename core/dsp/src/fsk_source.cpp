@@ -4,6 +4,8 @@
 #include <cmath>
 #include <limits>
 
+#include "archerfish/common/constants.hpp"
+
 namespace archerfish::dsp {
 
 void FskSource::configure(const nlohmann::json& params) {
@@ -59,7 +61,7 @@ size_t FskSource::render_block(std::complex<float>* out, size_t max_samples) {
     size_t to_generate = std::min(max_samples, total_available);
 
     const float amp = static_cast<float>(amplitude_);
-    const double two_pi = 2.0 * M_PI;
+    const double two_pi = archerfish::constants::kTwoPi;
 
     for (size_t i = 0; i < to_generate; ++i) {
         phase_ += two_pi * current_freq_hz_ / sample_rate_;

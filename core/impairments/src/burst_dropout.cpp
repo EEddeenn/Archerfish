@@ -40,12 +40,4 @@ std::string BurstDropoutImpairment::name() const {
     return "burst_dropout";
 }
 
-bool BurstDropoutImpairment::enabled() const {
-    return enabled_;
-}
-
-void BurstDropoutImpairment::set_enabled(bool v) {
-    enabled_ = v;
-}
-
 } // namespace archerfish::impairments

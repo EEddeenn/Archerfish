@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <archerfish/cli/app.hpp>
+#include "archerfish/cli/app.hpp"
 
 namespace archerfish::cli {
 

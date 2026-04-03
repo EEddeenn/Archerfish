@@ -7,6 +7,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "archerfish/common/error.hpp"
+
 namespace archerfish::scenario {
 
 struct Metadata {
@@ -21,6 +23,8 @@ struct RfSettings {
     double gain_db{0.0};
     std::optional<double> bandwidth_hz;
     std::optional<std::string> antenna;
+
+    [[nodiscard]] common::ErrorList validate() const;
 };
 
 struct DeviceDef {

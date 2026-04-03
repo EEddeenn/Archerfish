@@ -37,12 +37,4 @@ std::string IqImbalanceImpairment::name() const {
     return "iq_imbalance";
 }
 
-bool IqImbalanceImpairment::enabled() const {
-    return enabled_;
-}
-
-void IqImbalanceImpairment::set_enabled(bool v) {
-    enabled_ = v;
-}
-
 } // namespace archerfish::impairments

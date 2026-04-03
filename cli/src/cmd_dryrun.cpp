@@ -1,7 +1,9 @@
-#include <archerfish/cli/cmd_dryrun.hpp>
-#include <archerfish/scenario/parser.hpp>
-#include <archerfish/scenario/validator.hpp>
-#include <archerfish/scenario/planner.hpp>
+#include "archerfish/cli/cmd_dryrun.hpp"
+#include "archerfish/cli/pipeline.hpp"
+#include "archerfish/cli/format.hpp"
+#include "archerfish/scenario/parser.hpp"
+#include "archerfish/scenario/validator.hpp"
+#include "archerfish/scenario/planner.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -15,25 +17,6 @@
 namespace archerfish::cli {
 
 namespace {
-
-std::string format_freq(double hz) {
-    if (hz >= 1e9) return fmt::format("{:.1f} GHz", hz / 1e9);
-    if (hz >= 1e6) return fmt::format("{:.1f} MHz", hz / 1e6);
-    if (hz >= 1e3) return fmt::format("{:.1f} kHz", hz / 1e3);
-    return fmt::format("{:.0f} Hz", hz);
-}
-
-std::string format_rate(double sps) {
-    if (sps >= 1e6) return fmt::format("{:.0f} MSps", sps / 1e6);
-    if (sps >= 1e3) return fmt::format("{:.0f} kSps", sps / 1e3);
-    return fmt::format("{:.0f} Sps", sps);
-}
-
-std::string format_time(double sec) {
-    if (sec < 0.001) return fmt::format("{:.0f}us", sec * 1e6);
-    if (sec < 1.0) return fmt::format("{:.1f}ms", sec * 1e3);
-    return fmt::format("{:.3f}s", sec);
-}
 
 std::string waveform_label(const scenario::WaveformDef& wf) {
     const auto& p = wf.params;
@@ -203,56 +186,25 @@ std::string generate_timeline(const scenario::Plan& plan, const scenario::Scenar
 } // namespace
 
 int cmd_dryrun(const CliOptions& opts, const std::string& file_path) {
-    auto parse_result = scenario::parse_scenario(file_path);
-    if (!parse_result.has_value()) {
-        fmt::print(stderr, "Parse errors:\n");
-        for (const auto& e : parse_result.error()) {
+    auto result = cli::run_pipeline(file_path);
+    if (!result.has_value()) {
+        fmt::print(stderr, "Pipeline errors:\n");
+        for (const auto& e : result.error()) {
             fmt::print(stderr, "  [{}] {} \xE2\x80\x94 {}\n",
                        common::category_to_string(e.category), e.code, e.message);
         }
         return static_cast<int>(ExitCode::InputValidationFailure);
-    }
-
-    auto& scenario = parse_result.value();
-    auto ref_errors = scenario::resolve_waveform_refs(scenario);
-    if (!ref_errors.empty()) {
-        fmt::print(stderr, "Reference resolution errors:\n");
-        for (const auto& e : ref_errors) {
-            fmt::print(stderr, "  [{}] {} \xE2\x80\x94 {}\n",
-                       common::category_to_string(e.category), e.code, e.message);
-        }
-        return static_cast<int>(ExitCode::InputValidationFailure);
-    }
-
-    auto val_result = scenario::validate(scenario);
-    if (!val_result.ok()) {
-        fmt::print(stderr, "Validation failed:\n");
-        for (const auto& e : val_result.errors) {
-            fmt::print(stderr, "  [{}] {} \xE2\x80\x94 {}\n",
-                       common::category_to_string(e.category), e.code, e.message);
-        }
-        return static_cast<int>(ExitCode::InputValidationFailure);
-    }
-
-    auto plan_result = scenario::plan(scenario);
-    if (!plan_result.has_value()) {
-        fmt::print(stderr, "Planning errors:\n");
-        for (const auto& e : plan_result.error()) {
-            fmt::print(stderr, "  [{}] {} \xE2\x80\x94 {}\n",
-                       common::category_to_string(e.category), e.code, e.message);
-        }
-        return static_cast<int>(ExitCode::PlanningFailure);
     }
 
     if (opts.json_output) {
         nlohmann::json out;
-        out["scenario"] = scenario.metadata.name;
-        out["devices"] = scenario.devices.size();
-        out["emitters"] = scenario.emitters.size();
-        out["duration_sec"] = plan_result->estimated_duration_sec;
+        out["scenario"] = result->scenario.metadata.name;
+        out["devices"] = result->scenario.devices.size();
+        out["emitters"] = result->scenario.emitters.size();
+        out["duration_sec"] = result->plan.estimated_duration_sec;
 
         auto instructions = nlohmann::json::array();
-        for (const auto& instr : plan_result->render_instructions) {
+        for (const auto& instr : result->plan.render_instructions) {
             instructions.push_back({
                 {"emitter_id", instr.emitter_id},
                 {"start_sec", instr.start_sec},
@@ -263,7 +215,7 @@ int cmd_dryrun(const CliOptions& opts, const std::string& file_path) {
         out["render_instructions"] = instructions;
         fmt::print("{}\n", out.dump(2));
     } else {
-        auto timeline = generate_timeline(plan_result.value(), scenario);
+        auto timeline = generate_timeline(result->plan, result->scenario);
         fmt::print("{}", timeline);
     }
 

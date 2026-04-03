@@ -4,6 +4,8 @@
 #include <cmath>
 #include <limits>
 
+#include "archerfish/common/constants.hpp"
+
 namespace archerfish::dsp {
 
 void PulseSource::configure(const nlohmann::json& params) {
@@ -26,7 +28,7 @@ void PulseSource::configure(const nlohmann::json& params) {
 void PulseSource::prepare() {
     pw_samples_ = static_cast<size_t>(std::round(pulse_width_sec_ * sample_rate_));
     pri_samples_ = static_cast<size_t>(std::round(pri_sec_ * sample_rate_));
-    phase_ = 0.0f;
+    phase_ = 0.0;
     samples_generated_ = 0;
     pulse_done_ = false;
 }
@@ -45,9 +47,9 @@ size_t PulseSource::render_block(std::complex<float>* out, size_t max_samples) {
 
     size_t to_generate = std::min(max_samples, total_available);
 
-    const float phase_inc = static_cast<float>(2.0 * M_PI * frequency_hz_ / sample_rate_);
+    const double phase_inc = archerfish::constants::kTwoPi * frequency_hz_ / sample_rate_;
     const float amp = static_cast<float>(amplitude_);
-    const float two_pi = static_cast<float>(2.0 * M_PI);
+    const double two_pi = archerfish::constants::kTwoPi;
 
     bool is_single = (mode_ == "single");
 
@@ -55,7 +57,7 @@ size_t PulseSource::render_block(std::complex<float>* out, size_t max_samples) {
         size_t sample_in_pri = (samples_generated_ + i) % pri_samples_;
 
         if (sample_in_pri < pw_samples_) {
-            out[i] = amp * std::complex<float>(std::cos(phase_), std::sin(phase_));
+            out[i] = amp * std::complex<float>(static_cast<float>(std::cos(phase_)), static_cast<float>(std::sin(phase_)));
         } else {
             out[i] = std::complex<float>(0.0f, 0.0f);
         }
@@ -91,7 +93,7 @@ WaveformMetadata PulseSource::report_metadata() const {
 }
 
 void PulseSource::reset() {
-    phase_ = 0.0f;
+    phase_ = 0.0;
     samples_generated_ = 0;
     pulse_done_ = false;
 }

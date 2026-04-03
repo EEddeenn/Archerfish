@@ -1,6 +1,7 @@
 #include "archerfish/runtime/runtime.hpp"
 
 #include <chrono>
+#include <mutex>
 #include <thread>
 
 namespace archerfish::runtime {
@@ -95,20 +96,26 @@ bool Runtime::run() {
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
 
-        TxWorker tx_worker(*queue_, *device_, config_.channel);
-        active_tx_worker_ = &tx_worker;
-        tx_worker.start();
+        {
+            std::lock_guard lock(active_tx_worker_mutex_);
+            active_tx_worker_ = std::make_unique<TxWorker>(*queue_, *device_, config_.channel);
+        }
+        active_tx_worker_->start();
 
         render_worker.join();
         if (render_worker.samples_rendered() == 0) {
-            tx_worker.request_stop();
+            active_tx_worker_->request_stop();
         }
-        tx_worker.join();
-        active_tx_worker_ = nullptr;
+        active_tx_worker_->join();
 
-        metrics_.total_samples_sent += tx_worker.metrics().samples_sent.load();
-        metrics_.total_blocks_sent += tx_worker.metrics().blocks_sent.load();
-        metrics_.underruns += tx_worker.metrics().underruns.load();
+        metrics_.total_samples_sent += active_tx_worker_->metrics().samples_sent.load();
+        metrics_.total_blocks_sent += active_tx_worker_->metrics().blocks_sent.load();
+        metrics_.underruns += active_tx_worker_->metrics().underruns.load();
+
+        {
+            std::lock_guard lock(active_tx_worker_mutex_);
+            active_tx_worker_.reset();
+        }
     }
 
     if (!render_jobs_.empty()) {
@@ -130,19 +137,23 @@ bool Runtime::run() {
     metrics_.actual_stop_sec = stop_sec;
     metrics_.actual_duration_sec = stop_sec - start_sec;
 
-    state_machine_.transition_to(RuntimeState::Completed);
+    (void)state_machine_.transition_to(RuntimeState::Completed);
     return true;
 }
 
 void Runtime::abort() {
-    if (active_tx_worker_) {
-        active_tx_worker_->request_stop();
+    {
+        std::lock_guard lock(active_tx_worker_mutex_);
+        if (active_tx_worker_) active_tx_worker_->request_stop();
     }
-    state_machine_.transition_to(RuntimeState::Aborted);
+    (void)state_machine_.transition_to(RuntimeState::Aborted);
     device_->stop_tx(config_.channel);
-    if (active_tx_worker_) {
-        active_tx_worker_->join();
-        active_tx_worker_ = nullptr;
+    {
+        std::lock_guard lock(active_tx_worker_mutex_);
+        if (active_tx_worker_) {
+            active_tx_worker_->join();
+            active_tx_worker_.reset();
+        }
     }
 }
 

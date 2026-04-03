@@ -2,6 +2,8 @@
 
 #include <fmt/format.h>
 
+#include "archerfish/scenario/plan_io.hpp"
+
 namespace archerfish::reporting {
 
 nlohmann::json DeviceInfo_to_json(const DeviceInfo& di) {
@@ -20,22 +22,6 @@ DeviceInfo DeviceInfo_from_json(const nlohmann::json& j) {
     return di;
 }
 
-nlohmann::json Error_to_json(const common::Error& e) {
-    return {
-        {"category", common::category_to_string(e.category)},
-        {"code", e.code},
-        {"message", e.message},
-    };
-}
-
-common::Error Error_from_json(const nlohmann::json& j) {
-    common::Error e;
-    e.category = common::category_from_string(j.value("category", "Config"));
-    e.code = j.at("code").get<std::string>();
-    e.message = j.at("message").get<std::string>();
-    return e;
-}
-
 nlohmann::json Report::to_json() const {
     nlohmann::json devices_arr = nlohmann::json::array();
     for (const auto& d : devices) {
@@ -44,12 +30,12 @@ nlohmann::json Report::to_json() const {
 
     nlohmann::json warnings_arr = nlohmann::json::array();
     for (const auto& w : warnings) {
-        warnings_arr.push_back(Error_to_json(w));
+        warnings_arr.push_back(scenario::error_to_json(w));
     }
 
     nlohmann::json errors_arr = nlohmann::json::array();
     for (const auto& e : errors) {
-        errors_arr.push_back(Error_to_json(e));
+        errors_arr.push_back(scenario::error_to_json(e));
     }
 
     return {
@@ -82,11 +68,11 @@ Report Report::from_json(const nlohmann::json& j) {
     }
 
     for (const auto& w : j.at("warnings")) {
-        r.warnings.push_back(Error_from_json(w));
+        r.warnings.push_back(scenario::error_from_json(w));
     }
 
     for (const auto& e : j.at("errors")) {
-        r.errors.push_back(Error_from_json(e));
+        r.errors.push_back(scenario::error_from_json(e));
     }
 
     r.artifact_paths = j.at("artifact_paths").get<std::vector<std::string>>();

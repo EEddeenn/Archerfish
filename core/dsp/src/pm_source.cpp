@@ -4,6 +4,8 @@
 #include <cmath>
 #include <limits>
 
+#include "archerfish/common/constants.hpp"
+
 namespace archerfish::dsp {
 
 void PmSource::configure(const nlohmann::json& params) {
@@ -22,37 +24,37 @@ void PmSource::configure(const nlohmann::json& params) {
 }
 
 void PmSource::prepare() {
-    carrier_phase_ = 0.0f;
-    sample_index_ = 0;
+    carrier_phase_ = 0.0;
+    samples_produced_ = 0;
 }
 
 size_t PmSource::render_block(std::complex<float>* out, size_t max_samples) {
     size_t total_available = std::numeric_limits<size_t>::max();
     if (duration_sec_.has_value()) {
         size_t total_samples = static_cast<size_t>(std::round(duration_sec_.value() * sample_rate_));
-        if (sample_index_ >= total_samples)
+        if (samples_produced_ >= total_samples)
             return 0;
-        total_available = total_samples - sample_index_;
+        total_available = total_samples - samples_produced_;
     }
 
     size_t to_generate = std::min(max_samples, total_available);
 
-    const float carrier_incr = static_cast<float>(2.0 * M_PI * carrier_freq_hz_ / sample_rate_);
-    const float mod_incr = static_cast<float>(2.0 * M_PI * mod_freq_hz_ / sample_rate_);
+    const double carrier_incr = archerfish::constants::kTwoPi * carrier_freq_hz_ / sample_rate_;
+    const double mod_incr = archerfish::constants::kTwoPi * mod_freq_hz_ / sample_rate_;
     const float amp = static_cast<float>(amplitude_);
-    const float idx = static_cast<float>(mod_index_);
-    const float two_pi = static_cast<float>(2.0 * M_PI);
+    const double idx = mod_index_;
+    const double two_pi = archerfish::constants::kTwoPi;
 
     for (size_t i = 0; i < to_generate; ++i) {
-        float phase_modulation = idx * std::cos(mod_incr * static_cast<float>(sample_index_));
-        float total_phase = carrier_phase_ + phase_modulation;
+        double phase_modulation = idx * std::cos(mod_incr * static_cast<double>(samples_produced_));
+        double total_phase = carrier_phase_ + phase_modulation;
 
-        out[i] = amp * std::complex<float>(std::cos(total_phase), std::sin(total_phase));
+        out[i] = amp * std::complex<float>(static_cast<float>(std::cos(total_phase)), static_cast<float>(std::sin(total_phase)));
 
         carrier_phase_ += carrier_incr;
         if (carrier_phase_ > two_pi) carrier_phase_ -= two_pi;
 
-        sample_index_++;
+        samples_produced_++;
     }
 
     return to_generate;
@@ -72,8 +74,8 @@ WaveformMetadata PmSource::report_metadata() const {
 }
 
 void PmSource::reset() {
-    carrier_phase_ = 0.0f;
-    sample_index_ = 0;
+    carrier_phase_ = 0.0;
+    samples_produced_ = 0;
 }
 
 } // namespace archerfish::dsp

@@ -2,7 +2,7 @@
 
 #ifdef ARCHERFISH_HAS_UHD
 
-#include <archerfish/hal/hal_device.hpp>
+#include "archerfish/hal/hal_device.hpp"
 
 #include <mutex>
 #include <string>

@@ -14,9 +14,9 @@ TEST_CASE("SpscQueue push and pop single item", "[runtime][spsc]") {
 
 TEST_CASE("SpscQueue FIFO order preserved", "[runtime][spsc]") {
     SpscQueue<int> q(8);
-    q.push(1);
-    q.push(2);
-    q.push(3);
+    REQUIRE(q.push(1));
+    REQUIRE(q.push(2));
+    REQUIRE(q.push(3));
     REQUIRE(q.pop().value() == 1);
     REQUIRE(q.pop().value() == 2);
     REQUIRE(q.pop().value() == 3);
@@ -58,13 +58,13 @@ TEST_CASE("SpscQueue multiple push/pop cycles work correctly", "[runtime][spsc]"
 TEST_CASE("SpscQueue size reports correctly", "[runtime][spsc]") {
     SpscQueue<int> q(8);
     REQUIRE(q.size() == 0);
-    q.push(1);
+    REQUIRE(q.push(1));
     REQUIRE(q.size() == 1);
-    q.push(2);
+    REQUIRE(q.push(2));
     REQUIRE(q.size() == 2);
-    q.pop();
+    REQUIRE(q.pop().has_value());
     REQUIRE(q.size() == 1);
-    q.pop();
+    REQUIRE(q.pop().has_value());
     REQUIRE(q.size() == 0);
 }
 

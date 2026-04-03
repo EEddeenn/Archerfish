@@ -1,8 +1,8 @@
-#include <archerfish/hal/hal_factory.hpp>
-#include <archerfish/hal/stub_device.hpp>
+#include "archerfish/hal/hal_factory.hpp"
+#include "archerfish/hal/stub_device.hpp"
 
 #ifdef ARCHERFISH_HAS_UHD
-#include <archerfish/hal/uhd_device.hpp>
+#include "archerfish/hal/uhd_device.hpp"
 #endif
 
 #include <spdlog/spdlog.h>
