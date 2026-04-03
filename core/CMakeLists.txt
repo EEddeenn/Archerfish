@@ -1,0 +1,7 @@
+add_subdirectory(common)
+add_subdirectory(hal)
+add_subdirectory(runtime)
+add_subdirectory(dsp)
+add_subdirectory(impairments)
+add_subdirectory(scheduler)
+add_subdirectory(reporting)

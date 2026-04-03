@@ -1,0 +1,55 @@
+{
+  "metadata": { "name": "mixed_scene_demo" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 915000000.0,
+        "rate_sps": 20000000.0,
+        "gain_db": 18.0
+      }
+    }
+  ],
+  "waveforms": [
+    {
+      "id": "qpsk_base",
+      "type": "qpsk",
+      "symbol_rate": 1000000.0,
+      "samples_per_symbol": 8,
+      "rrc_alpha": 0.35,
+      "amplitude": 0.2
+    }
+  ],
+  "emitters": [
+    {
+      "id": "chirp_a",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 1.0,
+      "duration_sec": 0.02,
+      "waveform": {
+        "type": "chirp",
+        "f0_hz": -2000000.0,
+        "f1_hz": 2000000.0,
+        "amplitude": 0.3
+      }
+    },
+    {
+      "id": "qam_burst",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 2.0,
+      "duration_sec": 0.10,
+      "waveform_ref": "qpsk_base",
+      "impairments": {
+        "cfo_hz": 200.0,
+        "iq_gain_imbalance_db": 0.2
+      }
+    }
+  ],
+  "reporting": {
+    "save_plan": true,
+    "save_metrics": true
+  }
+}

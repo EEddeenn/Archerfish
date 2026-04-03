@@ -1,0 +1,30 @@
+{
+  "metadata": { "name": "qpsk_burst" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2400000000.0,
+        "rate_sps": 8000000.0,
+        "gain_db": 15.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "qpsk1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 1.5,
+      "duration_sec": 0.10,
+      "waveform": {
+        "type": "qpsk",
+        "symbol_rate": 1000000.0,
+        "samples_per_symbol": 8,
+        "rrc_alpha": 0.35,
+        "amplitude": 0.2
+      }
+    }
+  ]
+}

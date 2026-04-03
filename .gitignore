@@ -1,0 +1,28 @@
+# Build
+build/
+cmake-build-*/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Conan
+conan_cache/
+CMakeUserPresets.json
+conanbuild.sh
+conanrun.sh
+conanrun.env
+conantoolchain.cmake
+
+# CMake generated
+.cmake/
+.cache/
+
+# Generated output
+*.cf32
+*.ci16
+*.ci8
+runs/

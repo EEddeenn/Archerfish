@@ -1,0 +1,61 @@
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+
+#include <cmath>
+#include <complex>
+#include <vector>
+
+#include "archerfish/dsp/scaler.hpp"
+#include "archerfish/dsp/summer.hpp"
+
+using namespace archerfish::dsp;
+using Catch::Matchers::WithinAbs;
+
+TEST_CASE("Scaler multiply by 2.0 doubles amplitude", "[dsp][scaler]") {
+    std::vector<std::complex<float>> buf = {{1.0f, 0.0f}, {0.0f, 1.0f}, {0.5f, 0.5f}};
+    scale(buf.data(), buf.size(), 2.0f);
+
+    REQUIRE_THAT(buf[0].real(), WithinAbs(2.0f, 1e-6f));
+    REQUIRE_THAT(buf[0].imag(), WithinAbs(0.0f, 1e-6f));
+    REQUIRE_THAT(buf[1].real(), WithinAbs(0.0f, 1e-6f));
+    REQUIRE_THAT(buf[1].imag(), WithinAbs(2.0f, 1e-6f));
+    REQUIRE_THAT(buf[2].real(), WithinAbs(1.0f, 1e-6f));
+    REQUIRE_THAT(buf[2].imag(), WithinAbs(1.0f, 1e-6f));
+}
+
+TEST_CASE("Scaler complex rotation by exp(j*pi/4)", "[dsp][scaler]") {
+    float sq2 = std::sqrt(2.0f) / 2.0f;
+    std::complex<float> rot{sq2, sq2};
+
+    std::vector<std::complex<float>> buf = {{1.0f, 0.0f}};
+    scale(buf.data(), buf.size(), rot);
+
+    REQUIRE_THAT(buf[0].real(), WithinAbs(sq2, 1e-6f));
+    REQUIRE_THAT(buf[0].imag(), WithinAbs(sq2, 1e-6f));
+}
+
+TEST_CASE("Summer adds two constant buffers", "[dsp][summer]") {
+    std::vector<std::complex<float>> a(5, {1.0f, 0.5f});
+    std::vector<std::complex<float>> b(5, {0.5f, 1.0f});
+    std::vector<std::complex<float>> out(5);
+
+    summer(a.data(), b.data(), out.data(), out.size());
+
+    for (size_t i = 0; i < out.size(); ++i) {
+        REQUIRE_THAT(out[i].real(), WithinAbs(1.5f, 1e-6f));
+        REQUIRE_THAT(out[i].imag(), WithinAbs(1.5f, 1e-6f));
+    }
+}
+
+TEST_CASE("Summer headroom warning when sum exceeds 1.0", "[dsp][summer]") {
+    std::vector<std::complex<float>> a(3, {0.8f, 0.0f});
+    std::vector<std::complex<float>> b(3, {0.8f, 0.0f});
+    std::vector<std::complex<float>> out(3);
+
+    bool exceeds = summer_with_headroom_check(a.data(), b.data(), out.data(), out.size());
+
+    REQUIRE(exceeds);
+    for (size_t i = 0; i < out.size(); ++i) {
+        REQUIRE_THAT(out[i].real(), WithinAbs(1.6f, 1e-6f));
+    }
+}

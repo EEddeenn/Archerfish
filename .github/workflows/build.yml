@@ -1,0 +1,43 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake python3-pip
+          # UHD is optional — install if available
+          sudo apt-get install -y libuhd-dev || echo "UHD not available, building without USRP support"
+
+      - name: Install Conan
+        run: pip3 install conan
+
+      - name: Detect Conan profile
+        run: conan profile detect --force
+
+      - name: Install dependencies (${{ matrix.build_type }})
+        run: conan install . --build=missing -s build_type=${{ matrix.build_type }}
+
+      - name: Configure CMake
+        run: cmake --preset conan-${{ matrix.build_type == 'Release' && 'release' || 'debug' }}
+
+      - name: Build
+        run: cmake --build --preset conan-${{ matrix.build_type == 'Release' && 'release' || 'debug' }}
+
+      - name: Test
+        run: ctest --preset conan-${{ matrix.build_type == 'Release' && 'release' || 'debug' }} --output-on-failure

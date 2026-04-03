@@ -1,0 +1,29 @@
+{
+  "metadata": { "name": "chirp_burst" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 915000000.0,
+        "rate_sps": 20000000.0,
+        "gain_db": 18.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "chirp1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 1.0,
+      "duration_sec": 0.02,
+      "waveform": {
+        "type": "chirp",
+        "f0_hz": -2000000.0,
+        "f1_hz": 2000000.0,
+        "amplitude": 0.3
+      }
+    }
+  ]
+}
