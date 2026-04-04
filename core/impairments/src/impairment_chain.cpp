@@ -71,7 +71,8 @@ std::unique_ptr<ImpairmentChain> build_chain(
         chain->add(std::make_unique<DelayImpairment>(*imp.delay_sec, sample_rate));
     if (imp.burst_dropout_rate.has_value())
         chain->add(std::make_unique<BurstDropoutImpairment>(
-            *imp.burst_dropout_rate, imp.burst_dropout_mean_burst_sec.value_or(0.001)));
+            *imp.burst_dropout_rate,
+            imp.burst_dropout_mean_burst_sec.value_or(0.001) * sample_rate));
     if (imp.phase_noise_bandwidth_hz.has_value() && imp.phase_noise_magnitude_rad.has_value())
         chain->add(std::make_unique<PhaseNoiseImpairment>(
             *imp.phase_noise_bandwidth_hz, *imp.phase_noise_magnitude_rad,

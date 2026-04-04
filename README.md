@@ -183,7 +183,7 @@ Each emitter supports optional impairments:
     "dc_offset_i": 0.01,
     "dc_offset_q": -0.01,
     "awgn_power": 0.001,
-    "amplitude_ripple_depth": 0.1,
+    "amplitude_ripple_db": 0.1,
     "amplitude_ripple_freq_hz": 1000.0,
     "delay_sec": 0.0001,
     "burst_dropout_rate": 0.01,

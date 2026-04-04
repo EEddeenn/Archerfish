@@ -28,8 +28,8 @@ TEST_CASE("AmplitudeRipple on complex non-real data", "[impairments][amplitude_r
 }
 
 TEST_CASE("AmplitudeRipple with very high frequency oscillates rapidly", "[impairments][amplitude_ripple][standalone]") {
-    // High ripple frequency relative to sample rate
-    AmplitudeRippleImpairment ripple(0.3, 4000.0, 8000.0);
+    // High ripple frequency relative to sample rate (below Nyquist)
+    AmplitudeRippleImpairment ripple(0.3, 3500.0, 8000.0);
     std::vector<std::complex<float>> data(1000, {1.0f, 0.0f});
 
     ripple.apply(data.data(), data.size());
