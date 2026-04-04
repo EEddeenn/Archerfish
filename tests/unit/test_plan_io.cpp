@@ -1,3 +1,7 @@
+#include "archerfish/scenario/parser.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
+using archerfish::dsp::WaveformType;
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -22,7 +26,7 @@ Scenario make_simple_scenario() {
     em.channel = 0;
     em.start_after_sec = 1.0;
     em.duration_sec = 5.0;
-    em.waveform = WaveformDef{"cw_wf", "cw", nlohmann::json{{"amplitude", 0.5}}};
+    em.waveform = WaveformDef{"cw_wf", WaveformType::CW, nlohmann::json{{"amplitude", 0.5}}};
     s.emitters.push_back(em);
 
     return s;

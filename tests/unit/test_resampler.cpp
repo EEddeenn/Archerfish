@@ -5,6 +5,7 @@
 #include <complex>
 #include <vector>
 
+#include "archerfish/common/constants.hpp"
 #include "archerfish/dsp/resampler.hpp"
 
 using namespace archerfish::dsp;
@@ -59,7 +60,7 @@ TEST_CASE("ResamplerBlock identity passthrough", "[dsp][resampler]") {
     std::vector<std::complex<float>> in(n);
     for (size_t i = 0; i < n; ++i) {
         float t = static_cast<float>(i) / static_cast<float>(n);
-        in[i] = {std::cos(2.0f * float(M_PI) * t), std::sin(2.0f * float(M_PI) * t)};
+        in[i] = {std::cos(2.0f * float(archerfish::constants::kPi) * t), std::sin(2.0f * float(archerfish::constants::kPi) * t)};
     }
 
     auto out = rs.process(in.data(), n);
@@ -109,7 +110,7 @@ TEST_CASE("ResamplerBlock complex exponential phase coherence", "[dsp][resampler
 
     std::vector<std::complex<float>> in(n);
     for (size_t i = 0; i < n; ++i) {
-        float phase = 2.0f * float(M_PI) * freq * static_cast<float>(i);
+        float phase = 2.0f * float(archerfish::constants::kPi) * freq * static_cast<float>(i);
         in[i] = {std::cos(phase), std::sin(phase)};
     }
 
@@ -123,9 +124,8 @@ TEST_CASE("ResamplerBlock complex exponential phase coherence", "[dsp][resampler
 
     float out_freq = freq / static_cast<float>(ratio);
     for (size_t i = 20; i < out.size() - 20; ++i) {
-        float expected_phase = 2.0f * float(M_PI) * out_freq * static_cast<float>(i);
-        float expected_real = std::cos(expected_phase);
-        float expected_imag = std::sin(expected_phase);
+        float expected_phase = 2.0f * float(archerfish::constants::kPi) * out_freq * static_cast<float>(i);
+        (void)expected_phase;
         float mag = std::abs(out[i]);
         REQUIRE_THAT(mag, WithinAbs(1.0f, 0.15f));
     }
@@ -149,8 +149,8 @@ TEST_CASE("ResamplerBlock streaming equals batch", "[dsp][resampler]") {
     std::vector<std::complex<float>> in(total);
     for (size_t i = 0; i < total; ++i) {
         float t = static_cast<float>(i) / static_cast<float>(total);
-        in[i] = {std::cos(2.0f * float(M_PI) * 5.0f * t),
-                 std::sin(2.0f * float(M_PI) * 5.0f * t)};
+        in[i] = {std::cos(2.0f * float(archerfish::constants::kPi) * 5.0f * t),
+                 std::sin(2.0f * float(archerfish::constants::kPi) * 5.0f * t)};
     }
 
     auto batch_out = rs_batch.process(in.data(), total);

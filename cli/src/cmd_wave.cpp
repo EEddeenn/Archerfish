@@ -8,6 +8,7 @@
 #include "archerfish/dsp/am_source.hpp"
 #include "archerfish/dsp/fm_source.hpp"
 #include "archerfish/dsp/pm_source.hpp"
+#include "archerfish/dsp/ofdm_source.hpp"
 #include "archerfish/dsp/waveform_metadata_io.hpp"
 #include "archerfish/common/sample.hpp"
 
@@ -79,6 +80,7 @@ common::SampleBuffer read_cf32_file(const std::string& path, double sample_rate)
 } // namespace
 
 int cmd_wave_gen_cw(const CliOptions& opts, double rate, double duration, double amplitude, const std::string& output) {
+    (void)opts;
     dsp::CwSource src;
     nlohmann::json params;
     params["sample_rate"] = rate;
@@ -90,6 +92,7 @@ int cmd_wave_gen_cw(const CliOptions& opts, double rate, double duration, double
 }
 
 int cmd_wave_gen_chirp(const CliOptions& opts, double rate, double duration, double f0, double f1, double amplitude, const std::string& output) {
+    (void)opts;
     dsp::ChirpSource src;
     nlohmann::json params;
     params["sample_rate"] = rate;
@@ -102,6 +105,7 @@ int cmd_wave_gen_chirp(const CliOptions& opts, double rate, double duration, dou
 }
 
 int cmd_wave_gen_qpsk(const CliOptions& opts, double symbol_rate, int sps, double rrc_alpha, double duration, double amplitude, const std::string& output) {
+    (void)opts;
     dsp::ModulatorSource src;
     nlohmann::json params;
     params["modulation"] = "qpsk";
@@ -117,6 +121,7 @@ int cmd_wave_gen_qpsk(const CliOptions& opts, double symbol_rate, int sps, doubl
 }
 
 int cmd_wave_gen_pulse(const CliOptions& opts, double rate, double duration, double amplitude, double frequency, double pulse_width, double pri, const std::string& output) {
+    (void)opts;
     dsp::PulseSource src;
     nlohmann::json params;
     params["sample_rate"] = rate;
@@ -131,6 +136,7 @@ int cmd_wave_gen_pulse(const CliOptions& opts, double rate, double duration, dou
 }
 
 int cmd_wave_gen_ask(const CliOptions& opts, double rate, double duration, double amplitude, double frequency, double symbol_rate, int num_levels, const std::string& output) {
+    (void)opts;
     dsp::AskSource src;
     nlohmann::json params;
     params["sample_rate"] = rate;
@@ -145,6 +151,7 @@ int cmd_wave_gen_ask(const CliOptions& opts, double rate, double duration, doubl
 }
 
 int cmd_wave_gen_fsk(const CliOptions& opts, double rate, double duration, double amplitude, double center_freq, double symbol_rate, int modulation_order, double deviation, const std::string& output) {
+    (void)opts;
     dsp::FskSource src;
     nlohmann::json params;
     params["sample_rate"] = rate;
@@ -160,6 +167,7 @@ int cmd_wave_gen_fsk(const CliOptions& opts, double rate, double duration, doubl
 }
 
 int cmd_wave_gen_am(const CliOptions& opts, double rate, double duration, double amplitude, double carrier_freq, double mod_freq, double mod_depth, const std::string& output) {
+    (void)opts;
     dsp::AmSource src;
     nlohmann::json params;
     params["sample_rate"] = rate;
@@ -173,6 +181,7 @@ int cmd_wave_gen_am(const CliOptions& opts, double rate, double duration, double
 }
 
 int cmd_wave_gen_fm(const CliOptions& opts, double rate, double duration, double amplitude, double carrier_freq, double mod_freq, double deviation, const std::string& output) {
+    (void)opts;
     dsp::FmSource src;
     nlohmann::json params;
     params["sample_rate"] = rate;
@@ -186,6 +195,7 @@ int cmd_wave_gen_fm(const CliOptions& opts, double rate, double duration, double
 }
 
 int cmd_wave_gen_pm(const CliOptions& opts, double rate, double duration, double amplitude, double carrier_freq, double mod_freq, double mod_index, const std::string& output) {
+    (void)opts;
     dsp::PmSource src;
     nlohmann::json params;
     params["sample_rate"] = rate;
@@ -196,6 +206,53 @@ int cmd_wave_gen_pm(const CliOptions& opts, double rate, double duration, double
     params["duration_sec"] = duration;
     src.configure(params);
     return render_and_write(src, rate, output, "pm");
+}
+
+int cmd_wave_gen_apsk16(const CliOptions& opts, double symbol_rate, int sps, double rrc_alpha, double duration, double amplitude, const std::string& output) {
+    (void)opts;
+    dsp::ModulatorSource src;
+    nlohmann::json params;
+    params["modulation"] = "apsk16";
+    params["symbol_rate"] = symbol_rate;
+    params["samples_per_symbol"] = sps;
+    params["rrc_alpha"] = rrc_alpha;
+    params["amplitude"] = amplitude;
+    params["sample_rate"] = symbol_rate * static_cast<double>(sps);
+    params["duration_sec"] = duration;
+    params["seed"] = 42;
+    src.configure(params);
+    return render_and_write(src, symbol_rate * static_cast<double>(sps), output, "apsk16");
+}
+
+int cmd_wave_gen_apsk32(const CliOptions& opts, double symbol_rate, int sps, double rrc_alpha, double duration, double amplitude, const std::string& output) {
+    (void)opts;
+    dsp::ModulatorSource src;
+    nlohmann::json params;
+    params["modulation"] = "apsk32";
+    params["symbol_rate"] = symbol_rate;
+    params["samples_per_symbol"] = sps;
+    params["rrc_alpha"] = rrc_alpha;
+    params["amplitude"] = amplitude;
+    params["sample_rate"] = symbol_rate * static_cast<double>(sps);
+    params["duration_sec"] = duration;
+    params["seed"] = 42;
+    src.configure(params);
+    return render_and_write(src, symbol_rate * static_cast<double>(sps), output, "apsk32");
+}
+
+int cmd_wave_gen_ofdm(const CliOptions& opts, double rate, double duration, double amplitude, int fft_size, int cp_size, int active_subcarriers, const std::string& output) {
+    (void)opts;
+    dsp::OfdmSource src;
+    nlohmann::json params;
+    params["sample_rate"] = rate;
+    params["amplitude"] = amplitude;
+    params["fft_size"] = fft_size;
+    params["cyclic_prefix_size"] = cp_size;
+    params["active_subcarriers"] = active_subcarriers;
+    params["duration_sec"] = duration;
+    params["seed"] = 42;
+    src.configure(params);
+    return render_and_write(src, rate, output, "ofdm");
 }
 
 int cmd_wave_inspect(const CliOptions& opts, const std::string& file_path) {

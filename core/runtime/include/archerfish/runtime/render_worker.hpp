@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstddef>
 #include <memory>
+#include <stop_token>
 #include <string>
 #include <thread>
 
@@ -26,21 +27,24 @@ struct RenderJob {
 
 class RenderWorker {
 public:
-    RenderWorker(SampleQueue& output_queue, const RenderJob& job);
+    RenderWorker(SampleQueue& output_queue, const RenderJob& job,
+                 std::stop_source stop_src = std::stop_source());
 
     void start();
     void join();
+    void request_stop();
 
     [[nodiscard]] bool is_complete() const;
     [[nodiscard]] size_t samples_rendered() const;
 
 private:
     void run();
-    std::unique_ptr<dsp::ISource> create_source(const std::string& type);
+    std::unique_ptr<dsp::ISource> create_source(dsp::WaveformType type);
 
     SampleQueue& queue_;
     RenderJob job_;
     std::thread thread_;
+    std::stop_source stop_source_;
     std::atomic<bool> complete_{false};
     std::atomic<size_t> samples_rendered_{0};
 };

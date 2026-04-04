@@ -188,6 +188,14 @@ target_link_libraries(test_spsc_queue
 )
 add_test(NAME unit_spsc_queue COMMAND test_spsc_queue)
 
+add_executable(test_spsc_concurrent test_spsc_concurrent.cpp)
+target_link_libraries(test_spsc_concurrent
+    PRIVATE
+        archerfish_runtime
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_spsc_concurrent COMMAND test_spsc_concurrent)
+
 add_executable(test_render_worker test_render_worker.cpp)
 target_link_libraries(test_render_worker
     PRIVATE
@@ -359,3 +367,112 @@ target_link_libraries(test_dryrun
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_dryrun COMMAND test_dryrun)
+
+add_executable(test_source_base test_source_base.cpp)
+target_link_libraries(test_source_base
+    PRIVATE
+        archerfish_dsp
+        Catch2::Catch2WithMain
+)
+add_test(NAME dsp_source_base COMMAND test_source_base)
+
+add_executable(test_waveform_type test_waveform_type.cpp)
+target_link_libraries(test_waveform_type
+    PRIVATE
+        archerfish_dsp
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_waveform_type COMMAND test_waveform_type)
+
+add_executable(test_apsk_constellation test_apsk_constellation.cpp)
+target_link_libraries(test_apsk_constellation
+    PRIVATE
+        archerfish_dsp
+        Catch2::Catch2WithMain
+)
+add_test(NAME dsp_apsk_constellation COMMAND test_apsk_constellation)
+
+add_executable(test_ofdm_source test_ofdm_source.cpp)
+target_link_libraries(test_ofdm_source
+    PRIVATE
+        archerfish_dsp
+        Catch2::Catch2WithMain
+)
+add_test(NAME dsp_ofdm_source COMMAND test_ofdm_source)
+
+# --- Phase 4: Schema & Calibration CLI commands ---
+
+add_executable(test_cmd_schema test_cmd_schema.cpp)
+target_compile_definitions(test_cmd_schema PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(test_cmd_schema
+    PRIVATE
+        archerfish_cli
+        Catch2::Catch2WithMain
+)
+add_test(NAME cli_cmd_schema COMMAND test_cmd_schema)
+
+add_executable(test_calibration test_calibration.cpp)
+target_link_libraries(test_calibration
+    PRIVATE
+        archerfish_reporting
+        Catch2::Catch2WithMain
+)
+add_test(NAME reporting_calibration COMMAND test_calibration)
+
+add_executable(test_cmd_calib test_cmd_calib.cpp)
+target_link_libraries(test_cmd_calib
+    PRIVATE
+        archerfish_cli
+        Catch2::Catch2WithMain
+)
+add_test(NAME cli_cmd_calib COMMAND test_cmd_calib)
+
+# --- Phase 4.3: Multi-Emitter Additive Mixing ---
+
+add_executable(test_additive_mixer test_additive_mixer.cpp)
+target_link_libraries(test_additive_mixer
+    PRIVATE
+        archerfish_scheduler
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_additive_mixer COMMAND test_additive_mixer)
+
+# --- Phase 5.1: Timed Retune and Gain Changes ---
+
+add_executable(test_timed_events test_timed_events.cpp)
+target_link_libraries(test_timed_events
+    PRIVATE
+        archerfish_scheduler
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_timed_events COMMAND test_timed_events)
+
+# --- Phase 5.2: Repeated Burst Scheduling ---
+
+add_executable(test_burst_repeat test_burst_repeat.cpp)
+target_link_libraries(test_burst_repeat
+    PRIVATE
+        archerfish_scheduler
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_burst_repeat COMMAND test_burst_repeat)
+
+# --- Phase 5.3: Marker Events ---
+
+add_executable(test_marker_events test_marker_events.cpp)
+target_link_libraries(test_marker_events
+    PRIVATE
+        archerfish_scheduler
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_marker_events COMMAND test_marker_events)
+
+# --- Phase 5.4: Planning Diagnostics ---
+
+add_executable(test_planning_diagnostics test_planning_diagnostics.cpp)
+target_link_libraries(test_planning_diagnostics
+    PRIVATE
+        archerfish_scheduler
+        Catch2::Catch2WithMain
+)
+add_test(NAME unit_planning_diagnostics COMMAND test_planning_diagnostics)

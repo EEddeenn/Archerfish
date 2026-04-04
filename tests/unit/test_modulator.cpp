@@ -5,6 +5,7 @@
 #include <complex>
 #include <vector>
 
+#include "archerfish/common/constants.hpp"
 #include "archerfish/dsp/modulator.hpp"
 #include "archerfish/dsp/pulse_shaper.hpp"
 
@@ -425,6 +426,6 @@ TEST_CASE("8PSK constellation has Gray coding property", "[dsp][modulator]") {
                 min_1bit_dist = std::min(min_1bit_dist, dist);
             }
         }
-        REQUIRE_THAT(min_1bit_dist, WithinAbs(2.0 * std::sin(M_PI / 8.0), 0.01));
+        REQUIRE_THAT(min_1bit_dist, WithinAbs(2.0 * std::sin(archerfish::constants::kPi / 8.0), 0.01));
     }
 }

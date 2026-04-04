@@ -9,23 +9,18 @@
 namespace archerfish::dsp {
 
 void FmSource::configure(const nlohmann::json& params) {
-    if (params.contains("amplitude"))
-        amplitude_ = params["amplitude"].get<double>();
+    configure_common(params);
     if (params.contains("carrier_freq_hz"))
         carrier_freq_hz_ = params["carrier_freq_hz"].get<double>();
     if (params.contains("mod_freq_hz"))
         mod_freq_hz_ = params["mod_freq_hz"].get<double>();
     if (params.contains("deviation_hz"))
         deviation_hz_ = params["deviation_hz"].get<double>();
-    if (params.contains("sample_rate"))
-        sample_rate_ = params["sample_rate"].get<double>();
-    if (params.contains("duration_sec"))
-        duration_sec_ = params["duration_sec"].get<double>();
 }
 
 void FmSource::prepare() {
     phase_ = 0.0;
-    samples_produced_ = 0;
+    reset_common();
 }
 
 size_t FmSource::render_block(std::complex<float>* out, size_t max_samples) {
@@ -46,7 +41,6 @@ size_t FmSource::render_block(std::complex<float>* out, size_t max_samples) {
         double mod_signal = std::cos(mod_incr * static_cast<double>(samples_produced_));
         phase_ += carrier_incr + sensitivity * mod_signal;
 
-        // Wrap phase to [-π, π) — GNU Radio pattern
         phase_ = std::fmod(phase_ + archerfish::constants::kPi, archerfish::constants::kTwoPi) - archerfish::constants::kPi;
 
         out[i] = amp * std::complex<float>(static_cast<float>(std::cos(phase_)),
@@ -60,20 +54,17 @@ size_t FmSource::render_block(std::complex<float>* out, size_t max_samples) {
 
 WaveformMetadata FmSource::report_metadata() const {
     WaveformMetadata meta;
-    meta.sample_rate = sample_rate_;
+    fill_common_metadata(meta);
     meta.peak_amplitude = amplitude_;
     meta.rms_amplitude = amplitude_ / std::sqrt(2.0);
     meta.crest_factor = std::sqrt(2.0);
-    meta.duration_sec = duration_sec_;
-    meta.repeats = !duration_sec_.has_value();
-    // Carson's rule: BW = 2 * (deviation + mod_freq)
     meta.nominal_bandwidth = 2.0 * (deviation_hz_ + mod_freq_hz_);
     return meta;
 }
 
 void FmSource::reset() {
+    reset_common();
     phase_ = 0.0;
-    samples_produced_ = 0;
 }
 
 } // namespace archerfish::dsp

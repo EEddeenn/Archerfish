@@ -17,7 +17,7 @@ public:
 
 private:
     double dropout_rate_;
-    double mean_burst_len_;
+    [[maybe_unused]] double mean_burst_len_;
     std::mt19937 rng_;
     std::bernoulli_distribution burst_start_dist_;
     std::uniform_int_distribution<size_t> burst_len_dist_;

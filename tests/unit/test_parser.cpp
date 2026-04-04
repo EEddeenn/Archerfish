@@ -3,11 +3,13 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include "archerfish/scenario/parser.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
 
 #include <filesystem>
 
 using namespace archerfish::scenario;
 using namespace archerfish::common;
+using archerfish::dsp::WaveformType;
 using Catch::Matchers::WithinAbs;
 using Catch::Matchers::ContainsSubstring;
 
@@ -35,7 +37,7 @@ TEST_CASE("Parse future_start_cw.json", "[parser]") {
     REQUIRE_THAT(s.emitters[0].start_after_sec, WithinAbs(2.0, 1e-12));
     REQUIRE_THAT(s.emitters[0].duration_sec, WithinAbs(4.0, 1e-12));
     REQUIRE(s.emitters[0].waveform.has_value());
-    REQUIRE(s.emitters[0].waveform->type == "cw");
+    REQUIRE(s.emitters[0].waveform->type == WaveformType::CW);
     REQUIRE(s.emitters[0].waveform->params["amplitude"].get<double>() == 0.2);
 }
 
@@ -48,7 +50,7 @@ TEST_CASE("Parse chirp_burst.json", "[parser]") {
     REQUIRE(s.metadata.name == "chirp_burst");
     REQUIRE_THAT(s.devices[0].rf.freq_hz, WithinAbs(915e6, 1.0));
     REQUIRE(s.emitters[0].id == "chirp1");
-    REQUIRE(s.emitters[0].waveform->type == "chirp");
+    REQUIRE(s.emitters[0].waveform->type == WaveformType::Chirp);
     REQUIRE(s.emitters[0].waveform->params["f0_hz"].get<double>() == -2e6);
     REQUIRE(s.emitters[0].waveform->params["f1_hz"].get<double>() == 2e6);
     REQUIRE(s.emitters[0].waveform->params["amplitude"].get<double>() == 0.3);
@@ -61,7 +63,7 @@ TEST_CASE("Parse qpsk_burst.json", "[parser]") {
 
     const auto& s = result.value();
     REQUIRE(s.metadata.name == "qpsk_burst");
-    REQUIRE(s.emitters[0].waveform->type == "qpsk");
+    REQUIRE(s.emitters[0].waveform->type == WaveformType::QPSK);
     REQUIRE(s.emitters[0].waveform->params["symbol_rate"].get<double>() == 1e6);
     REQUIRE(s.emitters[0].waveform->params["samples_per_symbol"].get<int>() == 8);
     REQUIRE(s.emitters[0].waveform->params["rrc_alpha"].get<double>() == 0.35);
@@ -95,7 +97,7 @@ TEST_CASE("Parse from JSON string", "[parser]") {
     REQUIRE(s.metadata.version.has_value());
     REQUIRE(*s.metadata.version == "2.0");
     REQUIRE(s.devices.size() == 1);
-    REQUIRE(s.emitters[0].waveform->type == "noise");
+    REQUIRE(s.emitters[0].waveform->type == WaveformType::Noise);
     REQUIRE(s.reporting.save_plan);
     REQUIRE(s.reporting.save_metrics);
 }
@@ -149,7 +151,7 @@ TEST_CASE("resolve_waveform_refs: valid ref resolves", "[parser]") {
     auto errors = resolve_waveform_refs(s);
     REQUIRE(errors.empty());
     REQUIRE(s.emitters[0].waveform.has_value());
-    REQUIRE(s.emitters[0].waveform->type == "cw");
+    REQUIRE(s.emitters[0].waveform->type == WaveformType::CW);
     REQUIRE(s.emitters[0].waveform->params["amplitude"].get<double>() == 0.5);
 }
 
@@ -181,7 +183,7 @@ TEST_CASE("resolve_waveform_refs: inline waveform untouched", "[parser]") {
     REQUIRE(s.emitters[0].waveform.has_value());
     auto errors = resolve_waveform_refs(s);
     REQUIRE(errors.empty());
-    REQUIRE(s.emitters[0].waveform->type == "cw");
+    REQUIRE(s.emitters[0].waveform->type == WaveformType::CW);
     REQUIRE(s.emitters[0].waveform->params["amplitude"].get<double>() == 0.8);
 }
 

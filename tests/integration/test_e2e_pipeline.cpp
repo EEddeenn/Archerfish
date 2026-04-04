@@ -6,12 +6,14 @@
 #include "archerfish/scenario/plan_io.hpp"
 
 #include <filesystem>
+#include "archerfish/dsp/waveform_type.hpp"
 #include <fstream>
 #include <vector>
 #include <string>
 
 using namespace archerfish::scenario;
 using namespace archerfish::common;
+using WaveformType = archerfish::dsp::WaveformType;
 
 static const char* examples_dir = EXAMPLES_DIR;
 
@@ -108,7 +110,7 @@ TEST_CASE("E2E Pipeline: mixed_scene resolves waveform_ref and validates", "[e2e
     REQUIRE(scenario.emitters.size() == 2);
 
     REQUIRE(scenario.emitters[0].waveform.has_value());
-    REQUIRE(scenario.emitters[0].waveform->type == "chirp");
+    REQUIRE(scenario.emitters[0].waveform->type == WaveformType::Chirp);
 
     REQUIRE_FALSE(scenario.emitters[1].waveform.has_value());
     REQUIRE(scenario.emitters[1].waveform_ref.has_value());
@@ -117,7 +119,7 @@ TEST_CASE("E2E Pipeline: mixed_scene resolves waveform_ref and validates", "[e2e
     auto ref_errors = resolve_waveform_refs(scenario);
     REQUIRE(ref_errors.empty());
     REQUIRE(scenario.emitters[1].waveform.has_value());
-    REQUIRE(scenario.emitters[1].waveform->type == "qpsk");
+    REQUIRE(scenario.emitters[1].waveform->type == WaveformType::QPSK);
 
     auto validation = validate(scenario);
     REQUIRE(validation.ok());

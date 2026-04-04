@@ -2,15 +2,14 @@
 
 #include <complex>
 #include <cstddef>
-#include <optional>
 
 #include <nlohmann/json.hpp>
 
-#include "archerfish/dsp/source.hpp"
+#include "archerfish/dsp/source_base.hpp"
 
 namespace archerfish::dsp {
 
-class ChirpSource : public ISource {
+class ChirpSource : public SourceBase {
 public:
     void configure(const nlohmann::json& params) override;
     void prepare() override;
@@ -19,12 +18,8 @@ public:
     void reset() override;
 
 private:
-    double amplitude_{0.2};
     double f0_hz_{0.0};
     double f1_hz_{0.0};
-    double sample_rate_{1e6};
-    std::optional<double> duration_sec_;
-    size_t samples_generated_{0};
 };
 
 } // namespace archerfish::dsp

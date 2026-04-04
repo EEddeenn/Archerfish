@@ -6,6 +6,7 @@
 #include <set>
 #include <vector>
 
+#include "archerfish/common/constants.hpp"
 #include "archerfish/dsp/ask_source.hpp"
 #include "archerfish/dsp/fsk_source.hpp"
 
@@ -153,16 +154,16 @@ TEST_CASE("FSK M=2 produces frequency changes between symbols", "[dsp][fsk]") {
         float phase1 = std::arg(buf[(sym + 1) * sps]);
         float phase0 = std::arg(buf[sym * sps + sps - 1]);
         float dp = phase1 - phase0;
-        while (dp > M_PI) dp -= 2.0f * static_cast<float>(M_PI);
-        while (dp < static_cast<float>(-M_PI)) dp += 2.0f * static_cast<float>(M_PI);
+        while (dp > archerfish::constants::kPi) dp -= 2.0f * static_cast<float>(archerfish::constants::kPi);
+        while (dp < static_cast<float>(-archerfish::constants::kPi)) dp += 2.0f * static_cast<float>(archerfish::constants::kPi);
         float inst_freq = dp * static_cast<float>(fs) / static_cast<float>(sps);
 
         if (sym > 0) {
             float phase_prev = std::arg(buf[sym * sps]);
             float phase_prev_end = std::arg(buf[sym * sps - 1]);
             float dp_prev = phase_prev - phase_prev_end;
-            while (dp_prev > static_cast<float>(M_PI)) dp_prev -= 2.0f * static_cast<float>(M_PI);
-            while (dp_prev < static_cast<float>(-M_PI)) dp_prev += 2.0f * static_cast<float>(M_PI);
+            while (dp_prev > static_cast<float>(archerfish::constants::kPi)) dp_prev -= 2.0f * static_cast<float>(archerfish::constants::kPi);
+            while (dp_prev < static_cast<float>(-archerfish::constants::kPi)) dp_prev += 2.0f * static_cast<float>(archerfish::constants::kPi);
             float freq_prev = dp_prev * static_cast<float>(fs);
 
             if (std::abs(inst_freq - freq_prev) > 10e3f) {

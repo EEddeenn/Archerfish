@@ -3,8 +3,10 @@
 #include "archerfish/hal/stub_device.hpp"
 #include "archerfish/runtime/runtime.hpp"
 #include "archerfish/scenario/plan.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
 
 using namespace archerfish::runtime;
+using WaveformType = archerfish::dsp::WaveformType;
 using namespace archerfish::hal;
 using namespace archerfish::scenario;
 
@@ -25,7 +27,7 @@ TEST_CASE("Runtime full pipeline with single CW emitter", "[integration][runtime
 
     RenderInstruction instr;
     instr.emitter_id = "cw1";
-    instr.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"frequency_hz", 1000.0}, {"amplitude", 0.5}}};
+    instr.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"frequency_hz", 1000.0}, {"amplitude", 0.5}}};
     instr.start_sec = 0.0;
     instr.duration_sec = 0.01;
     instr.sample_rate = 1e6;
@@ -61,7 +63,7 @@ TEST_CASE("Runtime state transitions are correct", "[integration][runtime]") {
 
     RenderInstruction instr;
     instr.emitter_id = "cw1";
-    instr.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"frequency_hz", 1000.0}, {"amplitude", 0.5}}};
+    instr.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"frequency_hz", 1000.0}, {"amplitude", 0.5}}};
     instr.duration_sec = 0.001;
     instr.sample_rate = 1e6;
     plan.render_instructions.push_back(instr);
@@ -87,7 +89,7 @@ TEST_CASE("Runtime configures device RF settings from plan", "[integration][runt
 
     RenderInstruction instr;
     instr.emitter_id = "cw1";
-    instr.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"frequency_hz", 1000.0}, {"amplitude", 0.5}}};
+    instr.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"frequency_hz", 1000.0}, {"amplitude", 0.5}}};
     instr.duration_sec = 0.001;
     instr.sample_rate = 10e6;
     plan.render_instructions.push_back(instr);
@@ -117,7 +119,7 @@ TEST_CASE("Runtime abort transitions correctly", "[integration][runtime]") {
 
     RenderInstruction instr;
     instr.emitter_id = "cw1";
-    instr.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"frequency_hz", 1000.0}, {"amplitude", 0.5}}};
+    instr.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"frequency_hz", 1000.0}, {"amplitude", 0.5}}};
     instr.duration_sec = 0.001;
     instr.sample_rate = 1e6;
     plan.render_instructions.push_back(instr);

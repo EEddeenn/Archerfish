@@ -37,7 +37,9 @@ All layers below are fully implemented in the current MVP.
 | Main | CLI entry, lifecycle, result collection |
 | Render | Generates waveform blocks into SPSC queue |
 | TX Worker | Reads blocks from queue, sends to device |
-| Event Dispatcher | Fires timed control events |
+| Event Dispatcher | Fires timed control events (retune, gain, markers) |
+
+The SPSC queue uses condition variables for blocking push/pop with cooperative cancellation via `std::stop_source`. This replaces the previous sleep-based polling model, reducing CPU usage during idle periods and enabling immediate wake on abort.
 
 ## State Machine
 
@@ -82,6 +84,14 @@ Plan
 
 Multi-emitter scenarios on one channel execute sequentially. The validator ensures non-overlapping time windows.
 
+### Multi-emitter Mixing
+
+When emitters overlap on the same channel with `mixing: "additive"`:
+- Planner groups overlapping emitters into `MixGroup` structs
+- RenderWorker renders each emitter to temp buffer, sums element-wise
+- Peak sum estimate computed, headroom warning if sum > 1.0
+- Non-overlapping emitters still execute sequentially (unchanged behavior)
+
 ## DSP Source Types
 
 All sources implement `ISource` with `configure() → prepare() → render_block() → reset()` lifecycle.
@@ -93,7 +103,7 @@ All sources implement `ISource` with `configure() → prepare() → render_block
 | CwSource | `A * exp(j*2π*f/sps * n)` | Supports frequency offset, continuous phase across blocks |
 | ChirpSource | Linear FM from f0→f1 | Constant-amplitude frequency sweep |
 | NoiseSource | AWGN via seeded `mt19937` | Reproducible with configurable seed |
-| ModulatorSource | BPSK/QPSK/8-PSK/16-QAM/64-QAM | See Modulator Architecture below |
+| ModulatorSource | BPSK/QPSK/8-PSK/16-QAM/64-QAM/APSK16/APSK32 | See Modulator Architecture below |
 | MultiToneSource | Sum of N complex tones | Each tone has independent frequency and amplitude |
 | FileSource | CF32 binary replay | Supports loop/finite modes, optional sidecar JSON metadata |
 | PulseSource | Configurable pulse train | Pulse width, PRI, frequency, duty cycle |
@@ -102,6 +112,7 @@ All sources implement `ISource` with `configure() → prepare() → render_block
 | AmSource | AM modulation | Sinusoidal amplitude modulation with depth control |
 | FmSource | FM modulation | Frequency modulation with configurable deviation |
 | PmSource | PM modulation | Phase modulation with configurable modulation index |
+| OfdmSource | IFFT-based multi-subcarrier | In-house Cooley-Tukey radix-2 FFT, cyclic prefix, random QPSK subcarriers |
 
 ### Processing Blocks
 
@@ -145,6 +156,26 @@ Root raised cosine (RRC) filter via `RrcFilterDesign`:
 
 Seeded `mt19937` PRNG produces reproducible bit streams. Seed defaults to 42, configurable via JSON.
 
+## Source Base Class
+
+All 12 concrete sources inherit from `SourceBase` (which inherits from `ISource`). `SourceBase` provides:
+- `configure_common(params)` — extract amplitude, sample_rate, duration_sec, seed from JSON
+- `compute_block_size(max_samples)` — duration-aware block sizing
+- `fill_common_metadata(meta)` — populate common metadata fields
+- `reset_common()` — reset shared counters
+- `validate_positive()` / `validate_non_negative()` — input validation helpers
+
+This eliminated ~200 lines of duplicated boilerplate across the DSP layer.
+
+## WaveformType Enum
+
+A typed `WaveformType` enum class replaces string-based waveform dispatch:
+- 19 waveform types + `Unknown` sentinel
+- `to_string()`, `waveform_type_from_string()`, `waveform_type_cli_name()` conversions
+- `SourceFactory` uses switch-based dispatch on `WaveformType`
+
+The `WaveformDef::type` field uses `dsp::WaveformType` instead of `std::string`, providing compile-time safety through the scheduler, runtime, and CLI layers.
+
 ## Impairment Pipeline
 
 ### Interface
@@ -175,6 +206,38 @@ class IImpairment {
 | Delay | `DelayImpairment` | Shifts samples by N samples with zero-fill buffer |
 | Burst Dropout | `BurstDropoutImpairment` | Randomly drops bursts of samples with configurable rate and duration |
 
+## Event System
+
+### Scenario Events
+Scenarios may include an `events` array with timed control events:
+- `retune` — change device center frequency at scheduled time
+- `gain_change` — change device gain at scheduled time
+- `marker` — log named timestamp for external synchronization
+- `burst` — trigger burst emission
+
+### Planner Timeline
+The planner converts scenario events into `TimelineEvent` objects with absolute timestamps, validated against device capabilities.
+
+### Event Dispatcher
+`EventDispatcher` runs a dedicated thread that:
+- Wakes at scheduled event times
+- Dispatches hardware commands through the HAL
+- Records marker dispatch times with wall-clock timestamps
+- Marker events are included in run reports via `MarkerDispatch` records
+
+### Burst Repeat
+Emitters support a `repeat` specification: `{ count, interval_sec }`. The planner unrolls repeated emitters into N individual render instructions with computed start times.
+
+### Planning Diagnostics
+The planner computes `ResourceEstimate` per scenario:
+- `estimated_cpu_load` — rough CPU utilization estimate
+- `peak_memory_bytes` — peak concurrent buffer usage
+- `min_inter_emitter_gap_sec` — minimum gap between emitters
+- `timing_feasible` — whether host can meet all deadlines
+- `warnings` — list of diagnostic warnings
+
+Displayed in `dry-run` output and included in JSON plan output.
+
 ## CLI Commands
 
 All commands are CLI11 subcommands under the `archerfish` binary.
@@ -187,6 +250,10 @@ All commands are CLI11 subcommands under the `archerfish` binary.
 | `archerfish scenario plan <file>` | Generate execution plan |
 | `archerfish scenario run <file>` | Execute scenario end to end |
 | `archerfish scenario dry-run <file>` | Dry-run scenario with ASCII timeline |
+| `archerfish schema print [--json] [--markdown]` | Print scenario JSON Schema |
+| `archerfish calib init --device <id> [--channel <n>]` | Initialize calibration file |
+| `archerfish calib show --device <id> [--channel <n>] [--json]` | Show calibration data |
+| `archerfish calib import <file> --device <id> [--channel <n>]` | Import calibration data |
 | `archerfish wave gen cw [opts]` | Generate CW waveform to CF32 file |
 | `archerfish wave gen chirp [opts]` | Generate chirp waveform to CF32 file |
 | `archerfish wave gen qpsk [opts]` | Generate QPSK waveform to CF32 file |
@@ -196,6 +263,9 @@ All commands are CLI11 subcommands under the `archerfish` binary.
 | `archerfish wave gen am [opts]` | Generate AM waveform to CF32 file |
 | `archerfish wave gen fm [opts]` | Generate FM waveform to CF32 file |
 | `archerfish wave gen pm [opts]` | Generate PM waveform to CF32 file |
+| `archerfish wave gen apsk16 [opts]` | Generate 16-APSK waveform to CF32 file |
+| `archerfish wave gen apsk32 [opts]` | Generate 32-APSK waveform to CF32 file |
+| `archerfish wave gen ofdm [opts]` | Generate OFDM waveform to CF32 file |
 | `archerfish wave inspect <file>` | Print waveform metadata |
 | `archerfish report show <file>` | Display execution report |
 | `archerfish doctor` | Run diagnostic checks |
@@ -208,13 +278,13 @@ Verified against CMakeLists.txt link targets:
 ```
 cli → common, scheduler, runtime, hal, dsp, reporting
  runtime → common, hal, dsp, scheduler, impairments
- scheduler → common
- dsp → common
- impairments → common
- reporting → common, scheduler
- hal → common
- ```
+  scheduler → common, dsp, fmt
+  dsp → common
+  impairments → common
+  reporting → common, scheduler
+  hal → common
+  ```
 
-> Note: `archerfish_cli` additionally links `nlohmann_json`, and `fmt::fmt`/`spdlog::spdlog`/`CLI11::CLI11`.
+> Note: `archerfish_cli` additionally links `nlohmann_json`, and `fmt::fmt`/`spdlog::spdlog`/`CLI11::CLI11`. `archerfish_scheduler` links `archerfish_dsp` (for WaveformType) and `fmt` (for plan formatting).
 
 `common` is the leaf dependency. No module depends upward.

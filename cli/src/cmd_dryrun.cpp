@@ -14,54 +14,57 @@
 
 #include <fmt/format.h>
 
+#include "archerfish/dsp/waveform_type.hpp"
+
 namespace archerfish::cli {
 
 namespace {
 
 std::string waveform_label(const scenario::WaveformDef& wf) {
     const auto& p = wf.params;
-    if (wf.type == "cw") {
+    using dsp::WaveformType;
+    if (wf.type == WaveformType::CW) {
         double amp = p.value("amplitude", 0.0);
         return fmt::format("CW A={}", amp);
     }
-    if (wf.type == "chirp") {
+    if (wf.type == WaveformType::Chirp) {
         double f0 = p.value("f0_hz", 0.0);
         double f1 = p.value("f1_hz", 0.0);
         double amp = p.value("amplitude", 0.0);
         return fmt::format("Chirp f0={}→{} A={}", format_freq(f0), format_freq(f1), amp);
     }
-    if (wf.type == "pulse") {
+    if (wf.type == WaveformType::Pulse) {
         double freq = p.value("frequency_hz", 0.0);
         double pw = p.value("pulse_width_sec", 0.0);
         double pri = p.value("pri_sec", 0.0);
         return fmt::format("Pulse f={} PW={} PRI={}",
                            format_freq(freq), format_time(pw), format_time(pri));
     }
-    if (wf.type == "noise") {
+    if (wf.type == WaveformType::Noise) {
         double amp = p.value("amplitude", 0.0);
         return fmt::format("Noise A={}", amp);
     }
-    if (wf.type == "qpsk" || wf.type == "bpsk" || wf.type == "8psk") {
+    if (wf.type == WaveformType::QPSK || wf.type == WaveformType::BPSK || wf.type == WaveformType::PSK8) {
         double sr = p.value("symbol_rate", 0.0);
         double amp = p.value("amplitude", 0.0);
-        std::string type_upper = wf.type;
+        std::string type_upper = dsp::to_string(wf.type);
         std::transform(type_upper.begin(), type_upper.end(), type_upper.begin(), ::toupper);
         return fmt::format("{} {} A={}", type_upper, format_rate(sr), amp);
     }
-    if (wf.type == "qam16" || wf.type == "qam64") {
+    if (wf.type == WaveformType::QAM16 || wf.type == WaveformType::QAM64) {
         double sr = p.value("symbol_rate", 0.0);
         double amp = p.value("amplitude", 0.0);
-        std::string type_upper = wf.type;
+        std::string type_upper = dsp::to_string(wf.type);
         std::transform(type_upper.begin(), type_upper.end(), type_upper.begin(), ::toupper);
         return fmt::format("{} {} A={}", type_upper, format_rate(sr), amp);
     }
-    if (wf.type == "multi_tone") {
+    if (wf.type == WaveformType::MultiTone) {
         return "MultiTone";
     }
-    if (wf.type == "file") {
+    if (wf.type == WaveformType::File) {
         return fmt::format("File({})", p.value("path", ""));
     }
-    return wf.type;
+    return dsp::to_string(wf.type);
 }
 
 struct TimelineEntry {
@@ -180,6 +183,35 @@ std::string generate_timeline(const scenario::Plan& plan, const scenario::Scenar
         out << "\n";
     }
 
+    const auto& est = plan.resource_estimate;
+    if (est.estimated_cpu_load > 0.0 || !est.timing_feasible || !est.warnings.empty()) {
+        out << std::string(65, '\xE2') << "\n";
+        out << "Resource Estimates:\n";
+        out << fmt::format("  CPU load:        {:.1f}%\n", est.estimated_cpu_load * 100.0);
+        out << fmt::format("  Peak memory:     {} bytes\n", est.peak_memory_bytes);
+        out << fmt::format("  Min gap:         {:.1f} us\n", est.min_inter_emitter_gap_sec * 1e6);
+        out << fmt::format("  Timing feasible: {}\n", est.timing_feasible ? "yes" : "no");
+        for (const auto& w : est.warnings) {
+            out << fmt::format("  Warning: {}\n", w);
+        }
+    }
+
+    if (!plan.mix_groups.empty()) {
+        out << std::string(65, '\xE2') << "\n";
+        out << fmt::format("Mix Groups: {}\n", plan.mix_groups.size());
+        for (const auto& mg : plan.mix_groups) {
+            std::string emitter_list;
+            for (size_t i = 0; i < mg.emitter_ids.size(); ++i) {
+                if (i > 0) emitter_list += ", ";
+                emitter_list += mg.emitter_ids[i];
+            }
+            out << fmt::format("  {} ch{} [{:.3f}s - {:.3f}s] peak={:.2f} emitters={}\n",
+                               mg.device_id, mg.channel, mg.start_sec,
+                               mg.start_sec + mg.duration_sec,
+                               mg.estimated_peak_sum, emitter_list);
+        }
+    }
+
     return out.str();
 }
 
@@ -209,10 +241,35 @@ int cmd_dryrun(const CliOptions& opts, const std::string& file_path) {
                 {"emitter_id", instr.emitter_id},
                 {"start_sec", instr.start_sec},
                 {"duration_sec", instr.duration_sec},
-                {"waveform_type", instr.waveform.type},
+                {"waveform_type", dsp::to_string(instr.waveform.type)},
             });
         }
         out["render_instructions"] = instructions;
+
+        const auto& est = result->plan.resource_estimate;
+        out["resource_estimate"] = {
+            {"estimated_cpu_load", est.estimated_cpu_load},
+            {"peak_memory_bytes", est.peak_memory_bytes},
+            {"min_inter_emitter_gap_sec", est.min_inter_emitter_gap_sec},
+            {"timing_feasible", est.timing_feasible},
+            {"warnings", est.warnings},
+        };
+
+        if (!result->plan.mix_groups.empty()) {
+            auto mg_arr = nlohmann::json::array();
+            for (const auto& mg : result->plan.mix_groups) {
+                mg_arr.push_back({
+                    {"device_id", mg.device_id},
+                    {"channel", mg.channel},
+                    {"start_sec", mg.start_sec},
+                    {"duration_sec", mg.duration_sec},
+                    {"emitter_ids", mg.emitter_ids},
+                    {"estimated_peak_sum", mg.estimated_peak_sum},
+                });
+            }
+            out["mix_groups"] = mg_arr;
+        }
+
         fmt::print("{}\n", out.dump(2));
     } else {
         auto timeline = generate_timeline(result->plan, result->scenario);

@@ -6,6 +6,8 @@
 #include <nlohmann/json.hpp>
 #include <fmt/format.h>
 
+#include "archerfish/dsp/waveform_type.hpp"
+
 namespace archerfish::scenario {
 
 using json = nlohmann::json;
@@ -72,10 +74,17 @@ static std::expected<DeviceDef, ErrorList> parse_device(const json& j) {
     return dev;
 }
 
-static WaveformDef parse_waveform(const json& j, std::optional<std::string> id = std::nullopt) {
+static std::expected<WaveformDef, ErrorList> parse_waveform(const json& j, std::optional<std::string> id = std::nullopt) {
     WaveformDef wf;
     wf.id = std::move(id);
-    wf.type = j.at("type").get<std::string>();
+
+    auto type_str = j.at("type").get<std::string>();
+    auto type_result = dsp::waveform_type_from_string(type_str);
+    if (!type_result.has_value()) {
+        return std::unexpected(ErrorList{
+            make_error(ErrorCategory::Config, "E_INVALID_WAVEFORM_TYPE", type_result.error())});
+    }
+    wf.type = *type_result;
 
     json params = j;
     params.erase("type");
@@ -127,7 +136,12 @@ static std::expected<EmitterDef, ErrorList> parse_emitter(const json& j) {
     if (j.contains("duration_sec")) em.duration_sec = j.at("duration_sec").get<double>();
 
     if (j.contains("waveform") && j.at("waveform").is_object()) {
-        em.waveform = parse_waveform(j.at("waveform"));
+        auto wf_result = parse_waveform(j.at("waveform"));
+        if (wf_result.has_value()) {
+            em.waveform = std::move(*wf_result);
+        } else {
+            for (auto& e : wf_result.error()) errors.push_back(std::move(e));
+        }
     }
     if (j.contains("waveform_ref")) {
         em.waveform_ref = j.at("waveform_ref").get<std::string>();
@@ -142,8 +156,51 @@ static std::expected<EmitterDef, ErrorList> parse_emitter(const json& j) {
         }
     }
 
+    if (j.contains("mixing")) {
+        auto mixing_str = j.at("mixing").get<std::string>();
+        if (mixing_str == "additive") {
+            em.mixing = MixingMode::Additive;
+        } else {
+            em.mixing = MixingMode::None;
+        }
+    }
+
+    if (j.contains("repeat") && j.at("repeat").is_object()) {
+        const auto& rj = j.at("repeat");
+        RepeatSpec rs;
+        if (rj.contains("count")) rs.count = rj.at("count").get<int>();
+        if (rj.contains("interval_sec")) rs.interval_sec = rj.at("interval_sec").get<double>();
+        em.repeat = rs;
+    }
+
     if (!errors.empty()) return std::unexpected(std::move(errors));
     return em;
+}
+
+static std::expected<ScenarioEvent, ErrorList> parse_event(const json& j) {
+    ErrorList errors;
+    ScenarioEvent evt;
+
+    if (!j.contains("target_device")) {
+        errors.push_back(make_error(ErrorCategory::Config, "E_MISSING_FIELD", "event target_device is required"));
+    } else {
+        evt.target_device = j.at("target_device").get<std::string>();
+    }
+
+    if (j.contains("time_sec")) evt.time_sec = j.at("time_sec").get<double>();
+
+    if (!j.contains("type")) {
+        errors.push_back(make_error(ErrorCategory::Config, "E_MISSING_FIELD", "event type is required"));
+    } else {
+        evt.type = j.at("type").get<std::string>();
+    }
+
+    if (j.contains("payload") && j.at("payload").is_object()) {
+        evt.payload = j.at("payload");
+    }
+
+    if (!errors.empty()) return std::unexpected(std::move(errors));
+    return evt;
 }
 
 static std::expected<Scenario, ErrorList> parse_scenario_from_json(const json& root) {
@@ -172,7 +229,12 @@ static std::expected<Scenario, ErrorList> parse_scenario_from_json(const json& r
         for (const auto& wj : root.at("waveforms")) {
             std::optional<std::string> wf_id;
             if (wj.contains("id")) wf_id = wj.at("id").get<std::string>();
-            scenario.waveforms.push_back(parse_waveform(wj, std::move(wf_id)));
+            auto wf_result = parse_waveform(wj, std::move(wf_id));
+            if (wf_result.has_value()) {
+                scenario.waveforms.push_back(std::move(*wf_result));
+            } else {
+                for (auto& e : wf_result.error()) errors.push_back(std::move(e));
+            }
         }
     }
 
@@ -183,6 +245,17 @@ static std::expected<Scenario, ErrorList> parse_scenario_from_json(const json& r
                 scenario.emitters.push_back(std::move(*em_result));
             } else {
                 for (auto& e : em_result.error()) errors.push_back(std::move(e));
+            }
+        }
+    }
+
+    if (root.contains("events") && root.at("events").is_array()) {
+        for (const auto& evj : root.at("events")) {
+            auto ev_result = parse_event(evj);
+            if (ev_result.has_value()) {
+                scenario.events.push_back(std::move(*ev_result));
+            } else {
+                for (auto& e : ev_result.error()) errors.push_back(std::move(e));
             }
         }
     }

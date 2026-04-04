@@ -5,6 +5,7 @@
 #include <complex>
 #include <vector>
 
+#include "archerfish/common/constants.hpp"
 #include "archerfish/dsp/cw_source.hpp"
 
 using namespace archerfish::dsp;
@@ -37,7 +38,7 @@ TEST_CASE("CW at F Hz produces correct phase progression", "[dsp][cw]") {
     REQUIRE(n == 10);
 
     for (size_t i = 0; i < n; ++i) {
-        double expected_phase = 2.0 * M_PI * freq / fs * static_cast<double>(i);
+        double expected_phase = 2.0 * archerfish::constants::kPi * freq / fs * static_cast<double>(i);
         float expected_re = static_cast<float>(std::cos(expected_phase));
         float expected_im = static_cast<float>(std::sin(expected_phase));
         REQUIRE_THAT(buf[i].real(), WithinAbs(expected_re, 1e-5f));

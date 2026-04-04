@@ -1,0 +1,35 @@
+{
+  "metadata": { "name": "repeated_burst" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 10000000000.0,
+        "rate_sps": 20000000.0,
+        "gain_db": 20.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "pulse1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 0.005,
+      "waveform": {
+        "type": "pulse",
+        "amplitude": 0.5,
+        "frequency_hz": 1000000.0,
+        "pulse_width_sec": 0.00001,
+        "pri_sec": 0.0001,
+        "mode": "train"
+      },
+      "repeat": {
+        "count": 5,
+        "interval_sec": 0.1
+      }
+    }
+  ]
+}

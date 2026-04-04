@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 
+#include "archerfish/common/constants.hpp"
 #include "archerfish/dsp/modulator.hpp"
 #include "archerfish/impairments/impairment_chain.hpp"
 #include "archerfish/impairments/awgn.hpp"
@@ -126,7 +127,7 @@ TEST_CASE("QPSK with phase offset rotates all symbols", "[integration][qpsk][imp
         float expected_phase = std::arg(clean[i]) + static_cast<float>(phase_offset);
         float actual_phase = std::arg(rotated[i]);
         float diff = std::abs(actual_phase - expected_phase);
-        if (diff > static_cast<float>(M_PI)) diff = 2.0f * static_cast<float>(M_PI) - diff;
+        if (diff > static_cast<float>(archerfish::constants::kPi)) diff = 2.0f * static_cast<float>(archerfish::constants::kPi) - diff;
         REQUIRE(diff < 0.01f);
     }
 }

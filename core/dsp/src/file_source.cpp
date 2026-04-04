@@ -10,14 +10,11 @@
 namespace archerfish::dsp {
 
 void FileSource::configure(const nlohmann::json& params) {
+    configure_common(params);
     if (params.contains("path"))
         path_ = params["path"].get<std::string>();
-    if (params.contains("sample_rate"))
-        sample_rate_ = params["sample_rate"].get<double>();
     if (params.contains("loop"))
         loop_ = params["loop"].get<bool>();
-    if (params.contains("duration_sec"))
-        duration_sec_ = params["duration_sec"].get<double>();
 }
 
 void FileSource::prepare() {

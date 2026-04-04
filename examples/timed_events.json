@@ -1,0 +1,47 @@
+{
+  "metadata": { "name": "timed_events_demo" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2450000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 20.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "cw1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 5.0,
+      "waveform": {
+        "type": "cw",
+        "amplitude": 0.2
+      }
+    }
+  ],
+  "events": [
+    {
+      "target_device": "usrp0",
+      "time_sec": 2.0,
+      "type": "gain_change",
+      "payload": { "gain_db": 25.0 }
+    },
+    {
+      "target_device": "usrp0",
+      "time_sec": 3.5,
+      "type": "retune",
+      "payload": { "freq_hz": 2400000000.0 }
+    },
+    {
+      "target_device": "usrp0",
+      "time_sec": 4.0,
+      "type": "marker",
+      "payload": { "label": "checkpoint" }
+    }
+  ]
+}

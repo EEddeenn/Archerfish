@@ -40,6 +40,10 @@ size_t EventDispatcher::total_events() const {
     return events_.size();
 }
 
+const std::vector<MarkerDispatch>& EventDispatcher::marker_dispatches() const {
+    return marker_dispatches_;
+}
+
 void EventDispatcher::run() {
     for (auto& event : events_) {
         if (cancelled_.load(std::memory_order_acquire)) {

@@ -15,3 +15,10 @@ target_link_libraries(archerfish_common
         spdlog::spdlog
         nlohmann_json::nlohmann_json
 )
+
+target_compile_options(archerfish_common INTERFACE
+    -Wall -Wextra -Wpedantic -Werror
+    -Wimplicit-fallthrough
+    -Wnull-dereference
+    -Woverloaded-virtual
+)

@@ -3,6 +3,7 @@ add_library(archerfish_reporting STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/report.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/run_directory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/emitter_metrics.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/calibration.cpp
 )
 
 target_include_directories(archerfish_reporting

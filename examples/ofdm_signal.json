@@ -1,0 +1,31 @@
+{
+  "metadata": { "name": "ofdm_signal" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 3500000000.0,
+        "rate_sps": 20000000.0,
+        "gain_db": 15.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "ofdm1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 0.1,
+      "waveform": {
+        "type": "ofdm",
+        "fft_size": 64,
+        "cyclic_prefix_size": 16,
+        "active_subcarriers": 52,
+        "sample_rate": 20000000.0,
+        "amplitude": 0.15
+      }
+    }
+  ]
+}

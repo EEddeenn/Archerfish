@@ -7,12 +7,14 @@
 #include "archerfish/scenario/plan_io.hpp"
 #include "archerfish/hal/stub_device.hpp"
 #include "archerfish/runtime/runtime.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
 
 #include <filesystem>
 
 using namespace archerfish::scenario;
 using namespace archerfish::runtime;
 using namespace archerfish::hal;
+using WaveformType = archerfish::dsp::WaveformType;
 using namespace archerfish::common;
 using Catch::Matchers::WithinAbs;
 
@@ -27,7 +29,7 @@ TEST_CASE("E2E CW: parse future_start_cw through full pipeline", "[e2e][cw]") {
     REQUIRE(scenario.metadata.name == "future_start_cw");
     REQUIRE(scenario.devices.size() == 1);
     REQUIRE(scenario.emitters.size() == 1);
-    REQUIRE(scenario.emitters[0].waveform->type == "cw");
+    REQUIRE(scenario.emitters[0].waveform->type == WaveformType::CW);
 
     auto ref_errors = resolve_waveform_refs(scenario);
     REQUIRE(ref_errors.empty());
@@ -41,7 +43,7 @@ TEST_CASE("E2E CW: parse future_start_cw through full pipeline", "[e2e][cw]") {
     const auto& p = plan_result.value();
     REQUIRE(p.render_instructions.size() == 1);
     REQUIRE(p.timeline.size() == 2);
-    REQUIRE(p.render_instructions[0].waveform.type == "cw");
+    REQUIRE(p.render_instructions[0].waveform.type == WaveformType::CW);
     REQUIRE_THAT(p.render_instructions[0].start_sec, WithinAbs(2.0, 1e-9));
     REQUIRE_THAT(p.render_instructions[0].duration_sec, WithinAbs(4.0, 1e-9));
 

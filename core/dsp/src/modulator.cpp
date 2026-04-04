@@ -9,8 +9,6 @@
 
 namespace {
 
-// Gray decode: convert Gray-coded index to natural binary position
-// Reference: liquid-dsp modem_utilities.c
 static uint32_t gray_decode(uint32_t x) {
     uint32_t mask = x;
     uint32_t result = x;
@@ -32,22 +30,16 @@ void ModulatorSource::build_constellation() {
         constellation_ = {{1.0f, 0.0f}, {-1.0f, 0.0f}};
         break;
     case ModulationType::QPSK: {
-        // Gray-coded QPSK: bit0→I sign, bit1→Q sign
-        // Reference: liquid-dsp modem_qpsk.proto.c
-        // Mapping: 00→(+,+), 01→(-,+), 10→(+,-), 11→(-,-)
         float s = 1.0f / std::sqrt(2.0f);
         constellation_ = {
-            {s, s},    // 00
-            {-s, s},   // 01
-            {s, -s},   // 10
-            {-s, -s}   // 11
+            {s, s},
+            {-s, s},
+            {s, -s},
+            {-s, -s}
         };
         break;
     }
     case ModulationType::PSK8: {
-        // Gray-coded 8-PSK
-        // Reference: GNU Radio gr-digital constellation.cc constellation_8psk
-        // Angles chosen so adjacent phase states differ by exactly 1 bit
         float a = static_cast<float>(archerfish::constants::kPi) / 8.0f;
         int angles[] = {1, 7, 15, 9, 3, 5, 13, 11};
         for (int k = 0; k < 8; ++k) {
@@ -57,11 +49,6 @@ void ModulatorSource::build_constellation() {
         break;
     }
     case ModulationType::QAM16: {
-        // Gray-coded 16-QAM using liquid-dsp algorithm
-        // Reference: liquid-dsp modem_qam.proto.c
-        // Split symbol bits: upper 2→I axis, lower 2→Q axis
-        // Apply gray_decode independently to each axis
-        // Normalize for unit average symbol energy: alpha = 1/sqrt(10)
         const float alpha = 1.0f / std::sqrt(10.0f);
         for (uint32_t sym = 0; sym < 16; ++sym) {
             uint32_t si = sym >> 2;
@@ -75,9 +62,6 @@ void ModulatorSource::build_constellation() {
         break;
     }
     case ModulationType::QAM64: {
-        // Gray-coded 64-QAM using liquid-dsp algorithm
-        // Split symbol bits: upper 3→I axis, lower 3→Q axis
-        // Normalize for unit average symbol energy: alpha = 1/sqrt(42)
         const float alpha = 1.0f / std::sqrt(42.0f);
         for (uint32_t sym = 0; sym < 64; ++sym) {
             uint32_t si = sym >> 3;
@@ -87,6 +71,68 @@ void ModulatorSource::build_constellation() {
             float re = (2.0f * static_cast<float>(si) - 7.0f) * alpha;
             float im = (2.0f * static_cast<float>(sq) - 7.0f) * alpha;
             constellation_.push_back({re, im});
+        }
+        break;
+    }
+    case ModulationType::APSK16: {
+        // DVB-S2 16-APSK: inner ring (4 points), outer ring (12 points)
+        // Default ratio gamma = r2/r1 ≈ 2.85
+        const double gamma = 2.85;
+        const int n_inner = 4;
+        const int n_outer = 12;
+        // Compute normalization: average energy = 1.0
+        // E_avg = (n_inner * r1^2 + n_outer * r2^2) / (n_inner + n_outer)
+        // With r2 = gamma * r1: E_avg = r1^2 * (n_inner + n_outer * gamma^2) / (n_inner + n_outer)
+        const double denom = static_cast<double>(n_inner + n_outer);
+        const double coeff = static_cast<double>(n_inner) + static_cast<double>(n_outer) * gamma * gamma;
+        double r1 = std::sqrt(denom / coeff);
+        double r2 = gamma * r1;
+        // Inner ring: 4 points equally spaced starting at pi/4 (to interleave with outer)
+        for (int k = 0; k < n_inner; ++k) {
+            double theta = archerfish::constants::kTwoPi * k / n_inner;
+            constellation_.push_back({static_cast<float>(r1 * std::cos(theta)),
+                                      static_cast<float>(r1 * std::sin(theta))});
+        }
+        // Outer ring: 12 points with pi/12 offset
+        for (int k = 0; k < n_outer; ++k) {
+            double theta = archerfish::constants::kTwoPi * k / n_outer + archerfish::constants::kPi / 12.0;
+            constellation_.push_back({static_cast<float>(r2 * std::cos(theta)),
+                                      static_cast<float>(r2 * std::sin(theta))});
+        }
+        break;
+    }
+    case ModulationType::APSK32: {
+        // DVB-S2 32-APSK: inner (4), middle (12), outer (16)
+        // Default ratios: r2/r1 ≈ 2.72, r3/r1 ≈ 4.87
+        const double gamma1 = 2.72;
+        const double gamma2 = 4.87;
+        const int n_inner = 4;
+        const int n_middle = 12;
+        const int n_outer = 16;
+        const double denom = static_cast<double>(n_inner + n_middle + n_outer);
+        const double coeff = static_cast<double>(n_inner)
+                           + static_cast<double>(n_middle) * gamma1 * gamma1
+                           + static_cast<double>(n_outer) * gamma2 * gamma2;
+        double r1 = std::sqrt(denom / coeff);
+        double r2 = gamma1 * r1;
+        double r3 = gamma2 * r1;
+        // Inner ring: 4 points, offset 0
+        for (int k = 0; k < n_inner; ++k) {
+            double theta = archerfish::constants::kTwoPi * k / n_inner;
+            constellation_.push_back({static_cast<float>(r1 * std::cos(theta)),
+                                      static_cast<float>(r1 * std::sin(theta))});
+        }
+        // Middle ring: 12 points with pi/12 offset
+        for (int k = 0; k < n_middle; ++k) {
+            double theta = archerfish::constants::kTwoPi * k / n_middle + archerfish::constants::kPi / 12.0;
+            constellation_.push_back({static_cast<float>(r2 * std::cos(theta)),
+                                      static_cast<float>(r2 * std::sin(theta))});
+        }
+        // Outer ring: 16 points, offset 0
+        for (int k = 0; k < n_outer; ++k) {
+            double theta = archerfish::constants::kTwoPi * k / n_outer;
+            constellation_.push_back({static_cast<float>(r3 * std::cos(theta)),
+                                      static_cast<float>(r3 * std::sin(theta))});
         }
         break;
     }
@@ -111,6 +157,7 @@ std::complex<float> ModulatorSource::map_symbol(uint32_t bits) {
 }
 
 void ModulatorSource::configure(const nlohmann::json& params) {
+    configure_common(params);
     std::string mod;
     if (params.contains("modulation")) {
         mod = params["modulation"].get<std::string>();
@@ -125,6 +172,8 @@ void ModulatorSource::configure(const nlohmann::json& params) {
         else if (upper == "PSK8" || upper == "8PSK") modulation_ = ModulationType::PSK8;
         else if (upper == "QAM16" || upper == "16QAM") modulation_ = ModulationType::QAM16;
         else if (upper == "QAM64" || upper == "64QAM") modulation_ = ModulationType::QAM64;
+        else if (upper == "APSK16" || upper == "16APSK") modulation_ = ModulationType::APSK16;
+        else if (upper == "APSK32" || upper == "32APSK") modulation_ = ModulationType::APSK32;
     }
     if (params.contains("symbol_rate"))
         symbol_rate_ = params["symbol_rate"].get<double>();
@@ -132,25 +181,17 @@ void ModulatorSource::configure(const nlohmann::json& params) {
         samples_per_symbol_ = params["samples_per_symbol"].get<size_t>();
     if (params.contains("rrc_alpha"))
         rrc_alpha_ = params["rrc_alpha"].get<double>();
-    if (params.contains("amplitude"))
-        amplitude_ = params["amplitude"].get<double>();
-    if (params.contains("sample_rate"))
-        sample_rate_ = params["sample_rate"].get<double>();
-    if (params.contains("duration_sec"))
-        duration_sec_ = params["duration_sec"].get<double>();
-    if (params.contains("seed"))
-        seed_ = params["seed"].get<uint32_t>();
 }
 
 void ModulatorSource::prepare() {
-    rng_.seed(seed_);
+    rng_.seed(seed());
     build_constellation();
     build_rrc_taps();
     symbol_buffer_.clear();
     shaped_buffer_.clear();
     filter_tail_.assign(rrc_taps_.size() - 1, {0.0f, 0.0f});
     output_offset_ = 0;
-    samples_produced_ = 0;
+    reset_common();
 
     constexpr size_t calib_symbols = 256;
     auto saved_rng = rng_;
@@ -241,14 +282,12 @@ size_t ModulatorSource::render_block(std::complex<float>* out, size_t max_sample
             const size_t L = rrc_taps_.size();
             const size_t tail_len = L - 1;
 
-            // Upsample with zero-padding for filter ring-out
             size_t upsampled_len = N + tail_len;
             std::vector<std::complex<float>> upsampled(upsampled_len, {0.0f, 0.0f});
             for (size_t i = 0; i < num_symbols; ++i) {
                 upsampled[i * samples_per_symbol_] = symbols[i];
             }
 
-            // Overlap-save: prepend previous batch tail for inter-batch continuity
             size_t extended_len = tail_len + upsampled_len;
             std::vector<std::complex<float>> extended(extended_len, {0.0f, 0.0f});
             std::copy(filter_tail_.begin(), filter_tail_.end(), extended.begin());
@@ -269,7 +308,6 @@ size_t ModulatorSource::render_block(std::complex<float>* out, size_t max_sample
                 shaped_buffer_[n] = acc;
             }
 
-            // Preserve filter state: save last tail_len upsampled samples (before zero-pad)
             filter_tail_.assign(
                 upsampled.begin() + (N - tail_len),
                 upsampled.begin() + N);
@@ -283,18 +321,16 @@ size_t ModulatorSource::render_block(std::complex<float>* out, size_t max_sample
 
 WaveformMetadata ModulatorSource::report_metadata() const {
     WaveformMetadata meta;
-    meta.sample_rate = sample_rate_;
+    fill_common_metadata(meta);
     meta.peak_amplitude = amplitude_;
     meta.rms_amplitude = amplitude_ * rms_ratio_;
     meta.crest_factor = peak_to_rms_ratio_;
-    meta.duration_sec = duration_sec_;
-    meta.repeats = !duration_sec_.has_value();
     meta.nominal_bandwidth = symbol_rate_ * (1.0 + rrc_alpha_);
     return meta;
 }
 
 void ModulatorSource::reset() {
-    rng_.seed(seed_);
+    rng_.seed(seed());
     symbol_buffer_.clear();
     shaped_buffer_.clear();
     if (!rrc_taps_.empty())
@@ -302,7 +338,7 @@ void ModulatorSource::reset() {
     else
         filter_tail_.clear();
     output_offset_ = 0;
-    samples_produced_ = 0;
+    reset_common();
     peak_to_rms_ratio_ = std::sqrt(2.0);
     rms_ratio_ = 1.0 / std::sqrt(2.0);
 }

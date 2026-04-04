@@ -3,8 +3,8 @@
 ## Comprehensive Design Specification
 ### CLI-First Programmable Vector Signal Generator for USRP
 
-Version: Draft 3  
-Status: MVP Implemented — Phase 2 Complete
+Version: Draft 4  
+Status: MVP Implemented — Phase 5 Complete
 
 ---
 
@@ -628,6 +628,18 @@ The implemented `ISource` abstract base class provides the following methods:
 
 `ModulatorSource` (PSK/QAM) additionally exposes a `constellation()` const accessor for unit test verification of symbol-to-constellation mapping.
 
+### 12.3.2 Source base class (`SourceBase`)
+
+A shared base class `SourceBase` was extracted from the 12 concrete source implementations, eliminating ~200 lines of duplicated boilerplate. All concrete sources now inherit from `SourceBase` instead of directly from `ISource`.
+
+`SourceBase` provides:
+- `configure_common(params)` — extract amplitude, sample_rate, duration_sec, seed from JSON
+- `compute_block_size(max_samples)` — duration-aware block sizing (replaces the 8-line preamble in every source)
+- `fill_common_metadata(meta)` — populate common WaveformMetadata fields
+- `reset_common()` — reset shared counters
+- `validate_positive()` / `validate_non_negative()` — input validation helpers
+- Accessors: `amplitude()`, `sample_rate()`, `samples_produced()`, `seed()`
+
 ## 12.4 Sample format support
 
 Suggested internal canonical format:
@@ -692,13 +704,49 @@ Normalization factors ensure unit average symbol energy:
 
 These factors are derived from the average power of the rectangular QAM grid before normalization.
 
-## 12.8 Pulse shaping and filter continuity (implemented)
+### 12.7.2 APSK constellation mapping (DVB-S2)
 
-### 12.8.1 Root raised cosine (RRC) pulse shaper
+APSK (Amplitude Phase Shift Keying) constellations follow DVB-S2 standard geometry:
+- **16-APSK**: 2 rings — 4 inner points (r₁) + 12 outer points (r₂), with γ = r₂/r₁ = 2.85
+- **32-APSK**: 3 rings — 4 inner (r₁) + 12 middle (r₂) + 16 outer (r₃), normalized to unit average energy
+
+Ring radii are derived from the DVB-S2 specification. Bit mapping follows the DVB-S2 standard. Normalization ensures unit average symbol energy across all constellation points.
+
+## 12.8 WaveformType enum
+
+All waveform type dispatch uses a typed `WaveformType` enum class rather than string comparisons. The enum covers 19 waveform types (CW, Chirp, Noise, BPSK through QAM64, APSK16, APSK32, MultiTone, File, Pulse, ASK, FSK, AM, FM, PM, OFDM) plus an `Unknown` sentinel.
+
+Conversion functions:
+- `to_string(WaveformType)` — canonical lowercase name
+- `waveform_type_from_string(string_view)` — `std::expected<WaveformType, string>` with alias support (e.g. "16qam" → QAM16)
+- `waveform_type_cli_name(WaveformType)` — uppercase CLI display name
+
+The `SourceFactory` uses switch-based dispatch on `WaveformType` instead of string if-chains.
+
+## 12.9 OFDM synthesis source
+
+`OfdmSource` generates multi-subcarrier OFDM waveforms using an in-house Cooley-Tukey radix-2 IFFT. Configuration parameters:
+- `fft_size` — IFFT size (must be power of 2)
+- `cyclic_prefix_size` — samples copied from symbol tail as prefix
+- `active_subcarriers` — number of subcarriers carrying data
+- `amplitude` — output scaling
+
+Each OFDM symbol:
+1. Generate random QPSK symbols for active subcarriers
+2. Map to IFFT bins (center subcarrier and edges are zero-padded)
+3. IFFT to time domain (in-place, radix-2)
+4. Append cyclic prefix
+5. Concatenate symbols for the configured duration
+
+No external FFT library dependency. Normalized to unit average symbol energy.
+
+## 12.10 Pulse shaping and filter continuity (implemented)
+
+### 12.10.1 Root raised cosine (RRC) pulse shaper
 
 The RRC filter uses `constexpr kPi` instead of `M_PI` for Windows portability, ensuring the code compiles without relying on POSIX-defined math constants.
 
-### 12.8.2 Inter-batch filter continuity
+### 12.10.2 Inter-batch filter continuity
 
 The modulator source uses an overlap-save scheme to maintain filter state across `render_block()` calls. A `filter_tail_` buffer preserves the trailing samples from the FIR impulse response between consecutive block renders. This prevents discontinuities at batch boundaries that would otherwise appear as spectral splatter or transient artifacts in the output signal.
 
@@ -800,15 +848,15 @@ Therefore:
 
 ## 14.5 Event types
 
-Suggested event classes:
-- emitter start
-- emitter stop
-- gain change
-- frequency change
+Implemented event classes:
+- retune (frequency change at scheduled time)
+- gain_change (gain adjustment at scheduled time)
+- marker (named timestamp for synchronization/logging)
+- burst (burst trigger)
+
+Future event types:
 - waveform switch
-- impairment enable
-- impairment disable
-- marker event
+- impairment enable/disable
 
 ## 14.6 Multi-emitter policy on a single channel
 
@@ -832,6 +880,16 @@ The planner must compute:
 
 If sum amplitude risks clipping:
 - planner emits warning or error depending on policy.
+
+### Additive mixing (implemented)
+
+When emitters on the same channel have overlapping time windows and `mixing` is set to `"additive"`:
+- The planner groups overlapping emitters into `MixGroup` structures
+- Each MixGroup records: device_id, channel, time window, emitter_ids, estimated peak sum
+- The render worker renders each emitter independently, then sums element-wise
+- If the estimated peak sum exceeds 1.0, a headroom warning is emitted
+
+Emitters without explicit `mixing` mode are handled sequentially (non-overlapping windows enforced by validator, as before).
 
 ---
 
@@ -910,18 +968,21 @@ archerfish scenario run scenario.json
 archerfish wave gen cw ...
 archerfish wave gen chirp ...
 archerfish wave gen qpsk ...
+archerfish wave gen apsk16 --symbol-rate ... --sps ... --rrc ... --duration ... --amplitude ... --output ...
+archerfish wave gen apsk32 --symbol-rate ... --sps ... --rrc ... --duration ... --amplitude ... --output ...
+archerfish wave gen ofdm --rate ... --duration ... --amplitude ... --output ...
 archerfish wave inspect file.cf32
 
-archerfish calib init --device usrp0
-archerfish calib show --device usrp0
-archerfish calib import calib.json
+archerfish calib init --device usrp0 [--channel <n>]
+archerfish calib show --device usrp0 [--channel <n>] [--json]
+archerfish calib import calib.json --device <id> [--channel <n>]
 
 archerfish report show run_001.json
 archerfish metrics export --latest
 
 archerfish doctor
 archerfish version
-archerfish schema print
+archerfish schema print [--json] [--markdown]
 ```
 
 ## 16.2 CLI UX requirements
@@ -1129,6 +1190,41 @@ Emitter-local override policy:
     "save_plan": true,
     "save_metrics": true
   }
+}
+```
+
+### 17.4.1 Scenario with events and mixing
+
+```json
+{
+  "metadata": { "name": "advanced_scene" },
+  "devices": [
+    { "id": "usrp0", "channel": 0, "rf": { "freq_hz": 2450000000.0, "rate_sps": 20000000.0, "gain_db": 20.0 } }
+  ],
+  "emitters": [
+    {
+      "id": "cw1", "device": "usrp0", "channel": 0,
+      "start_after_sec": 0.0, "duration_sec": 1.0,
+      "waveform": { "type": "cw", "amplitude": 0.2 },
+      "mixing": "additive"
+    },
+    {
+      "id": "cw2", "device": "usrp0", "channel": 0,
+      "start_after_sec": 0.5, "duration_sec": 1.0,
+      "waveform": { "type": "cw", "amplitude": 0.15 },
+      "mixing": "additive"
+    },
+    {
+      "id": "pulse_train", "device": "usrp0", "channel": 0,
+      "start_after_sec": 2.0, "duration_sec": 0.001,
+      "waveform": { "type": "pulse", "amplitude": 0.5 },
+      "repeat": { "count": 5, "interval_sec": 0.01 }
+    }
+  ],
+  "events": [
+    { "target_device": "usrp0", "time_sec": 1.5, "type": "marker", "payload": { "label": "switch_point" } },
+    { "target_device": "usrp0", "time_sec": 2.0, "type": "gain_change", "payload": { "gain_db": 25.0 } }
+  ]
 }
 ```
 
@@ -1472,26 +1568,42 @@ While Archerfish is a local engineering tool, it still benefits from:
 - [x] Enhanced impairments (amplitude ripple, delay, burst dropout)
 - [x] Reporting improvements (emitter metrics, `report show`)
 - [x] Scenario dry-run with ASCII timeline
-- [ ] APSK constellation support
-- [ ] OFDM-like synthesis
-- [ ] `calib init` / `calib show` / `calib import` commands
-- [ ] `schema print` command for dumping the scenario JSON Schema
-- [ ] multi-emitter composition with additive mixing
+- [x] APSK constellation support (16-APSK, 32-APSK for DVB-S2)
+- [x] OFDM-like synthesis (in-house Cooley-Tukey FFT, cyclic prefix)
+- [x] `calib init` / `calib show` / `calib import` commands
+- [x] `schema print` command for dumping the scenario JSON Schema
+- [x] Multi-emitter composition with additive mixing
 
-## Phase 3: Scheduling sophistication
-- timed retune
-- timed gain changes
-- repeated bursts
-- marker events
-- stronger planning diagnostics
+## Phase 3: Codebase Hardening — DONE
+- [x] Warning enforcement (`-Wall -Wextra -Wpedantic -Werror`)
+- [x] ISource copy protection and `[[nodiscard]]` on render_block()
+- [x] SourceBase extraction (~200 LOC removed across 12 sources)
+- [x] WaveformType enum replacing string-based dispatch
+- [x] Condition variable thread coordination (replaces sleep-based polling)
+- [x] MIT LICENSE file
+- [x] CMake sanitizer options (ASAN, UBSAN)
+- [x] CMake package config with find_dependency calls
 
-## Phase 4: Multi-channel
+## Phase 4: Phase 2 Completion — DONE
+- [x] `schema print` command (human-readable, --json, --markdown)
+- [x] APSK constellations (16-APSK, 32-APSK per DVB-S2)
+- [x] Multi-emitter additive mixing with headroom diagnostics
+- [x] Calibration commands (init/show/import)
+- [x] OFDM synthesis (radix-2 FFT, cyclic prefix, configurable subcarriers)
+
+## Phase 5: Scheduling Sophistication — DONE
+- [x] Timed retune and gain change events
+- [x] Repeated burst scheduling (count + interval)
+- [x] Marker events for synchronization/logging
+- [x] Planning diagnostics (CPU load, memory, timing feasibility)
+
+## Phase 6: Multi-channel
 - multi-channel TX
 - same-device alignment
 - sync metadata
 - channel-level metrics
 
-## Phase 5: Performance and advanced features
+## Phase 7: Performance and advanced features
 - buffered replay
 - stronger calibration
 - richer impairments
@@ -1760,7 +1872,7 @@ Think like you are building the backend of a real RF instrument, not a demo. Opt
 These are intentionally left as explicit future decisions rather than hidden ambiguity:
 
 1. Which resampler implementation should back the DSP layer in v1?
-2. ~~Should v1 support one mixed overlapping-emitter path, or reject all overlap until Phase 2?~~ **Resolved:** v1 rejects all overlap. The validator enforces non-overlapping emitter windows on a single channel.
+2. ~~Should v1 support one mixed overlapping-emitter path, or reject all overlap until Phase 2?~~ **Resolved:** Overlap is allowed when emitters specify `"mixing": "additive"`. The planner groups overlapping emitters into `MixGroup` structures and renders them additively. Non-additive overlap is still rejected by the validator.
 3. What exact waveform sidecar metadata format should `wave gen` emit?
 4. Which JSON schema validator library best balances strictness and maintenance burden?
 5. When remote API work begins, should gRPC be embedded in the same process or in a service wrapper?
@@ -1801,3 +1913,39 @@ Rather than using a hardcoded peak-to-RMS ratio (such as sqrt(2)), the implement
 ### 34.4 Windows portability (constexpr kPi)
 
 The RRC pulse shaper and other DSP blocks use `constexpr kPi` instead of the POSIX `M_PI` macro. This ensures the code compiles cleanly on MSVC and other Windows toolchains where `M_PI` is not defined by default. The constant is defined once and reused across the DSP layer.
+
+### 34.5 SourceBase extraction (Phase 3)
+
+All 12 concrete ISource implementations were refactored to inherit from a shared `SourceBase` base class. This eliminated ~200 lines of duplicated code across the DSP layer. Common fields (amplitude, sample_rate, duration_sec, seed, samples_produced) and common behaviors (duration-aware block sizing, metadata filling, reset) are now in one place. Each concrete source overrides only type-specific configure/render logic.
+
+### 34.6 WaveformType enum (Phase 3)
+
+String-based waveform dispatch was replaced with a typed `WaveformType` enum class covering 19 waveform types plus an `Unknown` sentinel. The `SourceFactory` uses switch-based dispatch instead of string if-chains. The `WaveformDef::type` field changed from `std::string` to `dsp::WaveformType`, propagating type safety through the scheduler, runtime, and CLI layers.
+
+### 34.7 Condition variable queue coordination (Phase 3)
+
+The SPSC queue was augmented with condition variable methods (`push_notify()`, `pop_wait(stop_token)`, `push_wait(stop_token, item)`) replacing sleep-based polling in the TX worker and render worker. A `std::stop_source` enables cooperative cancellation of blocking waits, and lost-wakeup prevention requires the producer to lock the cv_mutex before notifying.
+
+### 34.8 APSK constellation geometry (Phase 4)
+
+DVB-S2 compliant 16-APSK (2 rings: 4+12, γ=2.85) and 32-APSK (3 rings: 4+12+16) constellations were added to the `ModulatorSource`. Constellation points are normalized to unit average symbol energy. Bit mapping follows the DVB-S2 standard for inter-ring Gray-like labeling.
+
+### 34.9 OFDM synthesis with in-house FFT (Phase 4)
+
+`OfdmSource` implements multi-subcarrier OFDM generation using an in-house Cooley-Tukey radix-2 IFFT, avoiding external FFT library dependencies. Each OFDM symbol is generated by: mapping random QPSK symbols to active subcarrier bins, performing IFFT, and appending a configurable cyclic prefix (tail samples copied to front). The implementation includes bit-reversal permutation for correct DIT ordering.
+
+### 34.10 Multi-emitter additive mixing (Phase 4)
+
+The planner detects overlapping emitter windows on the same channel and groups them into `MixGroup` structures. The render worker renders each emitter independently into temporary buffers, then sums element-wise. The planner estimates peak sum and emits headroom warnings if the sum exceeds 1.0. The validator was relaxed to allow overlaps when `mixing` is set to `"additive"`.
+
+### 34.11 Timed events and scheduling (Phase 5)
+
+The scenario model now supports an `events` array with types: retune, gain_change, marker, and burst. The planner converts these into `TimelineEvent` objects with absolute timestamps. An `EventDispatcher` thread wakes at scheduled times and dispatches hardware commands through the HAL interface. Marker events log with wall-clock timestamps and are included in run reports.
+
+### 34.12 Burst repeat scheduling (Phase 5)
+
+Emitters support a `repeat` specification with count and interval_sec. The planner unrolls repeated emitters into N individual render instructions with computed start times. This enables radar pulse train and EW burst patterns without manual emitter duplication.
+
+### 34.13 Planning diagnostics (Phase 5)
+
+The planner computes a `ResourceEstimate` for each scenario including: estimated CPU load, peak memory usage, minimum inter-emitter gap, and timing feasibility. These diagnostics are displayed in dry-run output and included in JSON plan output, helping users assess whether their scenario is practical for the available hardware.

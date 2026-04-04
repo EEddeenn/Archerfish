@@ -47,6 +47,9 @@ archerfish wave gen fsk --rate 10e6 --duration 0.1 --symbol-rate 1e6 --deviation
 archerfish wave gen am --rate 10e6 --duration 0.1 --mod-freq 1e3 --mod-depth 0.5 --amplitude 0.3 --output am.cf32
 archerfish wave gen fm --rate 10e6 --duration 0.1 --mod-freq 1e3 --deviation 50e3 --amplitude 0.3 --output fm.cf32
 archerfish wave gen pm --rate 10e6 --duration 0.1 --mod-freq 1e3 --mod-index 0.5 --amplitude 0.3 --output pm.cf32
+archerfish wave gen apsk16 --symbol-rate 1e6 --sps 8 --rrc 0.35 --duration 0.05 --amplitude 0.2 --output apsk16.cf32
+archerfish wave gen apsk32 --symbol-rate 1e6 --sps 8 --rrc 0.35 --duration 0.05 --amplitude 0.15 --output apsk32.cf32
+archerfish wave gen ofdm --rate 20e6 --duration 0.1 --amplitude 0.15 --output ofdm.cf32
 
 # Waveform inspection
 archerfish wave inspect cw.cf32
@@ -55,6 +58,12 @@ archerfish wave inspect cw.cf32 --json
 # Diagnostics
 archerfish doctor
 archerfish version
+
+# Schema and calibration
+archerfish schema print
+archerfish schema print --json
+archerfish calib init --device usrp0
+archerfish calib show --device usrp0
 
 # Reports
 archerfish report show runs/latest/report.json
@@ -94,7 +103,7 @@ Scenarios are JSON files describing what to transmit, where, and when.
 }
 ```
 
-See `examples/` for complete scenarios (CW, chirp, QPSK, mixed scene).
+See `examples/` for complete scenarios (CW, chirp, QPSK, APSK, OFDM, mixed scene, timed events, burst repeat, additive mixing).
 
 ### Supported waveform types
 
@@ -113,6 +122,8 @@ See `examples/` for complete scenarios (CW, chirp, QPSK, mixed scene).
 | `am` | `mod_freq_hz`, `mod_depth`, `amplitude` |
 | `fm` | `mod_freq_hz`, `deviation_hz`, `amplitude` |
 | `pm` | `mod_freq_hz`, `mod_index`, `amplitude` |
+| `apsk16`, `apsk32` | `symbol_rate`, `samples_per_symbol`, `rrc_alpha`, `amplitude` |
+| `ofdm` | `fft_size`, `cyclic_prefix_size`, `active_subcarriers`, `amplitude` |
 
 ### Waveform references
 
@@ -152,6 +163,52 @@ Each emitter supports optional impairments:
 }
 ```
 
+### Events
+
+Scenarios support timed control events:
+
+```json
+{
+  "events": [
+    { "target_device": "usrp0", "time_sec": 2.0, "type": "gain_change", "payload": { "gain_db": 25.0 } },
+    { "target_device": "usrp0", "time_sec": 3.5, "type": "retune", "payload": { "freq_hz": 2400000000.0 } },
+    { "target_device": "usrp0", "time_sec": 4.0, "type": "marker", "payload": { "label": "checkpoint" } }
+  ]
+}
+```
+
+### Burst Repeat
+
+Emitters can repeat with configurable count and interval:
+
+```json
+{
+  "id": "pulse_train",
+  "device": "usrp0",
+  "channel": 0,
+  "start_after_sec": 1.0,
+  "duration_sec": 0.001,
+  "waveform": { "type": "pulse", "amplitude": 0.5 },
+  "repeat": { "count": 10, "interval_sec": 0.1 }
+}
+```
+
+### Additive Mixing
+
+Overlapping emitters on the same channel can be mixed additively:
+
+```json
+{
+  "id": "cw2",
+  "device": "usrp0",
+  "channel": 0,
+  "start_after_sec": 0.5,
+  "duration_sec": 1.0,
+  "waveform": { "type": "cw", "amplitude": 0.15 },
+  "mixing": "additive"
+}
+```
+
 ## Project Structure
 
 ```
@@ -188,12 +245,15 @@ Parse → Validate → Plan → Prepare → Execute → Report
 - **TX worker thread** — reads blocks from queue, streams to device
 - **Event dispatcher** — fires timed control events
 
-For multi-emitter scenarios on one channel, emitters are executed sequentially (non-overlapping windows required by validator).
+For multi-emitter scenarios on one channel:
+- Non-overlapping emitters execute sequentially
+- Overlapping emitters with `mixing: "additive"` are rendered independently and summed element-wise
+- Timed events (retune, gain change, markers) are dispatched by a dedicated event thread
 
 ## Testing
 
 ```bash
-# Full test suite (47 tests)
+# Full test suite (60 tests)
 ctest --test-dir build --output-on-failure
 
 # Individual test binaries

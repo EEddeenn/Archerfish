@@ -5,6 +5,7 @@
 #include <complex>
 #include <vector>
 
+#include "archerfish/common/constants.hpp"
 #include "archerfish/impairments/awgn.hpp"
 #include "archerfish/impairments/cfo.hpp"
 #include "archerfish/impairments/phase_offset.hpp"
@@ -142,7 +143,7 @@ TEST_CASE("PhaseOffset zero preserves data", "[impairments][phase_offset]") {
 }
 
 TEST_CASE("PhaseOffset pi/2 rotates correctly", "[impairments][phase_offset]") {
-    archerfish::impairments::PhaseOffsetImpairment po(M_PI / 2.0);
+    archerfish::impairments::PhaseOffsetImpairment po(archerfish::constants::kPi / 2.0);
     std::vector<std::complex<float>> data = {{1.0f, 0.0f}};
 
     po.apply(data.data(), data.size());
@@ -158,7 +159,7 @@ TEST_CASE("PhaseOffset name", "[impairments][phase_offset]") {
 }
 
 TEST_CASE("PhaseOffset disable", "[impairments][phase_offset]") {
-    archerfish::impairments::PhaseOffsetImpairment po(M_PI / 4.0);
+    archerfish::impairments::PhaseOffsetImpairment po(archerfish::constants::kPi / 4.0);
     std::vector<std::complex<float>> data = {{1.0f, 0.0f}};
     auto original = data;
 

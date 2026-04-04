@@ -1,3 +1,7 @@
+#include "archerfish/scenario/parser.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
+using archerfish::dsp::WaveformType;
+
 #include <catch2/catch_test_macros.hpp>
 
 #include "archerfish/scenario/validator.hpp"
@@ -10,8 +14,8 @@ static Scenario make_valid_scenario() {
     s.metadata.name = "test";
     s.devices.push_back({"usrp0", 0, {2450000000.0, 10000000.0, 20.0}});
     s.emitters.push_back({"cw1", "usrp0", 0, 1.0, 4.0,
-                          WaveformDef{std::nullopt, "cw", {{"amplitude", 0.2}}},
-                          std::nullopt, std::nullopt});
+                          WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.2}}},
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
     return s;
 }
 
@@ -111,8 +115,8 @@ TEST_CASE("Emitter with no waveform and no waveform_ref produces error", "[valid
 TEST_CASE("Overlapping emitters on same channel produces error", "[validator]") {
     auto s = make_valid_scenario();
     s.emitters.push_back({"cw2", "usrp0", 0, 2.0, 3.0,
-                          WaveformDef{std::nullopt, "cw", {{"amplitude", 0.3}}},
-                          std::nullopt, std::nullopt});
+                          WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.3}}},
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
     auto result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V002_OVERLAPPING_EMITTERS"));
@@ -123,8 +127,8 @@ TEST_CASE("Non-overlapping emitters on same channel is OK", "[validator]") {
     s.emitters[0].start_after_sec = 0.0;
     s.emitters[0].duration_sec = 2.0;
     s.emitters.push_back({"cw2", "usrp0", 0, 2.0, 2.0,
-                          WaveformDef{std::nullopt, "cw", {{"amplitude", 0.3}}},
-                          std::nullopt, std::nullopt});
+                          WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.3}}},
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
     auto result = validate(s);
     CHECK(result.ok());
 }
@@ -133,15 +137,15 @@ TEST_CASE("Emitters on different channels don't conflict", "[validator]") {
     auto s = make_valid_scenario();
     s.devices[0].channel = std::nullopt;
     s.emitters.push_back({"cw2", "usrp0", 1, 1.0, 4.0,
-                          WaveformDef{std::nullopt, "cw", {{"amplitude", 0.3}}},
-                          std::nullopt, std::nullopt});
+                          WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.3}}},
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
     auto result = validate(s);
     CHECK(result.ok());
 }
 
 TEST_CASE("Unknown waveform type produces error", "[validator]") {
     auto s = make_valid_scenario();
-    s.emitters[0].waveform->type = "unknown_type";
+    s.emitters[0].waveform->type = static_cast<WaveformType>(999);
     auto result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V006_INVALID_WAVEFORM_TYPE"));
@@ -195,8 +199,8 @@ TEST_CASE("Duplicate device IDs produces error", "[validator]") {
 TEST_CASE("Duplicate emitter IDs produces error", "[validator]") {
     auto s = make_valid_scenario();
     s.emitters.push_back({"cw1", "usrp0", 0, 10.0, 2.0,
-                          WaveformDef{std::nullopt, "cw", {{"amplitude", 0.3}}},
-                          std::nullopt, std::nullopt});
+                          WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.3}}},
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
     auto result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V011_DUPLICATE_EMITTER_ID"));
@@ -204,8 +208,8 @@ TEST_CASE("Duplicate emitter IDs produces error", "[validator]") {
 
 TEST_CASE("Duplicate waveform IDs produces error", "[validator]") {
     auto s = make_valid_scenario();
-    s.waveforms.push_back({"wf1", "cw", {{"amplitude", 0.2}}});
-    s.waveforms.push_back({"wf1", "noise", {}});
+    s.waveforms.push_back(WaveformDef{"wf1", WaveformType::CW, {{"amplitude", 0.2}}});
+    s.waveforms.push_back(WaveformDef{"wf1", WaveformType::Noise, {}});
     auto result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V012_DUPLICATE_WAVEFORM_ID"));
@@ -234,7 +238,7 @@ TEST_CASE("Warnings use ErrorCategory::QualityWarning", "[validator]") {
 
 TEST_CASE("Emitter with valid waveform_ref resolves correctly", "[validator]") {
     auto s = make_valid_scenario();
-    s.waveforms.push_back({"my_cw", "cw", {{"amplitude", 0.5}}});
+    s.waveforms.push_back(WaveformDef{"my_cw", WaveformType::CW, {{"amplitude", 0.5}}});
     s.emitters[0].waveform = std::nullopt;
     s.emitters[0].waveform_ref = "my_cw";
     auto result = validate(s);
@@ -243,11 +247,14 @@ TEST_CASE("Emitter with valid waveform_ref resolves correctly", "[validator]") {
 
 TEST_CASE("Valid waveform types are accepted", "[validator]") {
     auto s = make_valid_scenario();
-    std::vector<std::string> types = {"cw", "chirp", "noise", "qpsk", "bpsk",
-                                       "8psk", "qam16", "qam64", "multi_tone", "file"};
-    for (const auto& t : types) {
+    std::vector<WaveformType> types = {WaveformType::CW, WaveformType::Chirp, WaveformType::Noise,
+                                         WaveformType::QPSK, WaveformType::BPSK, WaveformType::PSK8,
+                                         WaveformType::QAM16, WaveformType::QAM64,
+                                         WaveformType::MultiTone, WaveformType::File};
+    for (auto t : types) {
         s.emitters[0].waveform->type = t;
         auto result = validate(s);
         CHECK(result.ok());
     }
 }
+

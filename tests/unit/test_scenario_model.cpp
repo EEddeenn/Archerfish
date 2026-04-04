@@ -1,3 +1,7 @@
+#include "archerfish/scenario/parser.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
+using archerfish::dsp::WaveformType;
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -25,7 +29,7 @@ TEST_CASE("Default construction of all scenario structs", "[scenario][model]") {
 
     WaveformDef wf;
     REQUIRE_FALSE(wf.id.has_value());
-    REQUIRE(wf.type.empty());
+    REQUIRE(archerfish::dsp::to_string(wf.type) == "unknown");
     REQUIRE(wf.params.is_null());
 
     ImpairmentSettings imp;
@@ -81,7 +85,7 @@ TEST_CASE("EmitterDef with inline waveform", "[scenario][model]") {
     em.channel = 0;
     em.start_after_sec = 2.0;
     em.duration_sec = 4.0;
-    em.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"amplitude", 0.2}}};
+    em.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"amplitude", 0.2}}};
 
     REQUIRE(em.id == "cw1");
     REQUIRE(em.device == "usrp0");
@@ -89,7 +93,7 @@ TEST_CASE("EmitterDef with inline waveform", "[scenario][model]") {
     REQUIRE_THAT(em.start_after_sec, WithinAbs(2.0, 1e-12));
     REQUIRE_THAT(em.duration_sec, WithinAbs(4.0, 1e-12));
     REQUIRE(em.waveform.has_value());
-    REQUIRE(em.waveform->type == "cw");
+    REQUIRE(em.waveform->type == WaveformType::CW);
     REQUIRE(em.waveform->params["amplitude"].get<double>() == 0.2);
     REQUIRE_FALSE(em.waveform_ref.has_value());
 }
@@ -133,7 +137,7 @@ TEST_CASE("Scenario with named waveforms and multiple devices", "[scenario][mode
     s.devices.push_back({"usrp0", 0, {2.45e9, 10e6, 20.0}});
     s.devices.push_back({"usrp1", 0, {915e6, 20e6, 18.0}});
 
-    s.waveforms.push_back({"chirp_wf", "chirp", nlohmann::json{{"f0_hz", -2e6}, {"f1_hz", 2e6}}});
+    s.waveforms.push_back(WaveformDef{"chirp_wf", WaveformType::Chirp, nlohmann::json{{"f0_hz", -2e6}, {"f1_hz", 2e6}}});
 
     EmitterDef em;
     em.id = "em1";

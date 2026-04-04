@@ -14,6 +14,9 @@ int cmd_wave_gen_fsk(const CliOptions& opts, double rate, double duration, doubl
 int cmd_wave_gen_am(const CliOptions& opts, double rate, double duration, double amplitude, double carrier_freq, double mod_freq, double mod_depth, const std::string& output);
 int cmd_wave_gen_fm(const CliOptions& opts, double rate, double duration, double amplitude, double carrier_freq, double mod_freq, double deviation, const std::string& output);
 int cmd_wave_gen_pm(const CliOptions& opts, double rate, double duration, double amplitude, double carrier_freq, double mod_freq, double mod_index, const std::string& output);
+int cmd_wave_gen_apsk16(const CliOptions& opts, double symbol_rate, int sps, double rrc_alpha, double duration, double amplitude, const std::string& output);
+int cmd_wave_gen_apsk32(const CliOptions& opts, double symbol_rate, int sps, double rrc_alpha, double duration, double amplitude, const std::string& output);
+int cmd_wave_gen_ofdm(const CliOptions& opts, double rate, double duration, double amplitude, int fft_size, int cp_size, int active_subcarriers, const std::string& output);
 int cmd_wave_inspect(const CliOptions& opts, const std::string& file_path);
 
 } // namespace archerfish::cli

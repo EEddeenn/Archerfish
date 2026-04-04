@@ -4,11 +4,12 @@
 #include <string>
 
 #include "archerfish/dsp/source.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
 
 namespace archerfish::dsp {
 
-/// Create a source instance from a waveform type string.
-/// Returns nullptr if the type is unknown.
+[[nodiscard]] std::unique_ptr<ISource> create_source(WaveformType type);
+
 [[nodiscard]] std::unique_ptr<ISource> create_source(const std::string& type);
 
 } // namespace archerfish::dsp

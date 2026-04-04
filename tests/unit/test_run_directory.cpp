@@ -8,6 +8,9 @@
 
 #include "archerfish/reporting/run_directory.hpp"
 #include "archerfish/scenario/scenario.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
+
+using archerfish::dsp::WaveformType;
 
 using namespace archerfish::reporting;
 using namespace archerfish::scenario;
@@ -95,7 +98,7 @@ TEST_CASE("RunDirectory save_plan writes valid JSON", "[reporting][run_directory
         em.channel = 0;
         em.start_after_sec = 0.0;
         em.duration_sec = 5.0;
-        em.waveform = WaveformDef{"cw_wf", "cw", nlohmann::json{{"amplitude", 0.5}}};
+        em.waveform = WaveformDef{"cw_wf", WaveformType::CW, nlohmann::json{{"amplitude", 0.5}}};
         s.emitters.push_back(em);
 
         Plan p;

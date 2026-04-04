@@ -5,6 +5,10 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <fmt/format.h>
+
+#include "archerfish/dsp/waveform_type.hpp"
+
 namespace archerfish::scenario {
 
 namespace {
@@ -12,11 +16,6 @@ namespace {
 using common::Error;
 using common::ErrorCategory;
 using common::ErrorList;
-
-static const std::unordered_set<std::string> kValidWaveformTypes = {
-    "cw", "chirp", "noise", "qpsk", "bpsk", "8psk",
-    "qam16", "qam64", "multi_tone", "file",
-    "pulse", "ask", "fsk", "am", "fm", "pm"};
 
 void check_unique_ids(const Scenario& scenario, ValidationResult& result) {
     std::unordered_set<std::string> device_ids;
@@ -78,10 +77,11 @@ void check_rf_settings(const DeviceDef& device, ValidationResult& result) {
 }
 
 void check_waveform_type(const WaveformDef& wf, ValidationResult& result) {
-    if (!kValidWaveformTypes.count(wf.type)) {
+    auto name = dsp::to_string(wf.type);
+    if (name == "unknown") {
         result.errors.push_back({ErrorCategory::Validation,
                                  "V006_INVALID_WAVEFORM_TYPE",
-                                 "Unknown waveform type: '" + wf.type + "'"});
+                                 "Unknown waveform type"});
     }
 }
 
@@ -194,13 +194,83 @@ void check_overlaps(const Scenario& scenario, ValidationResult& result) {
                 bool overlaps = a.start_after_sec < b.start_after_sec + b.duration_sec &&
                                 b.start_after_sec < a.start_after_sec + a.duration_sec;
                 if (overlaps) {
-                    result.errors.push_back(
-                        {ErrorCategory::Validation,
-                         "V002_OVERLAPPING_EMITTERS",
-                         "Emitters '" + a.id + "' and '" + b.id +
-                             "' overlap on device '" + key.device +
-                             "' channel " + std::to_string(key.channel)});
+                    bool mixing_allowed = (a.mixing == MixingMode::Additive) &&
+                                          (b.mixing == MixingMode::Additive);
+                    if (mixing_allowed) {
+                        double peak_a = 0.0, peak_b = 0.0;
+                        if (a.waveform.has_value() && a.waveform->params.contains("amplitude"))
+                            peak_a = a.waveform->params["amplitude"].get<double>();
+                        if (b.waveform.has_value() && b.waveform->params.contains("amplitude"))
+                            peak_b = b.waveform->params["amplitude"].get<double>();
+                        if (peak_a + peak_b > 1.0) {
+                            result.warnings.push_back(
+                                {ErrorCategory::QualityWarning,
+                                 "W_MIX_HEADROOM",
+                                 "Emitters '" + a.id + "' and '" + b.id +
+                                     "' additive mix on device '" + key.device +
+                                     "' channel " + std::to_string(key.channel) +
+                                     ": estimated peak sum " +
+                                     std::to_string(peak_a + peak_b) + " exceeds 1.0"});
+                        }
+                    } else {
+                        result.errors.push_back(
+                            {ErrorCategory::Validation,
+                             "V002_OVERLAPPING_EMITTERS",
+                             "Emitters '" + a.id + "' and '" + b.id +
+                                 "' overlap on device '" + key.device +
+                                 "' channel " + std::to_string(key.channel)});
+                    }
                 }
+            }
+        }
+    }
+}
+
+void check_events(const Scenario& scenario, const std::unordered_set<std::string>& device_ids,
+                  ValidationResult& result) {
+    for (const auto& evt : scenario.events) {
+        if (!device_ids.count(evt.target_device)) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V013_EVENT_UNKNOWN_DEVICE",
+                                     "Event targets unknown device '" + evt.target_device + "'"});
+        }
+        if (evt.type != "retune" && evt.type != "gain_change" && evt.type != "marker" && evt.type != "burst") {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V014_INVALID_EVENT_TYPE",
+                                     "Unknown event type '" + evt.type + "'"});
+        }
+        if (evt.type == "retune") {
+            if (!evt.payload.contains("freq_hz")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V015_RETUNE_MISSING_FREQ",
+                                         "Retune event for device '" + evt.target_device +
+                                             "' missing freq_hz in payload"});
+            }
+        }
+        if (evt.type == "gain_change") {
+            if (!evt.payload.contains("gain_db")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V016_GAIN_MISSING_DB",
+                                         "Gain change event for device '" + evt.target_device +
+                                             "' missing gain_db in payload"});
+            }
+        }
+    }
+}
+
+void check_repeat(const Scenario& scenario, ValidationResult& result) {
+    for (const auto& em : scenario.emitters) {
+        if (em.repeat.has_value()) {
+            if (em.repeat->count < 1) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V017_INVALID_REPEAT_COUNT",
+                                         "Emitter '" + em.id + "': repeat count must be >= 1"});
+            }
+            if (em.repeat->count > 1 && em.repeat->interval_sec <= 0.0) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V018_INVALID_REPEAT_INTERVAL",
+                                         "Emitter '" + em.id +
+                                             "': repeat interval_sec must be > 0 when count > 1"});
             }
         }
     }
@@ -235,6 +305,8 @@ ValidationResult validate(const Scenario& scenario) {
     }
 
     check_overlaps(scenario, result);
+    check_events(scenario, device_ids, result);
+    check_repeat(scenario, result);
 
     return result;
 }

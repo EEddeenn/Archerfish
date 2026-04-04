@@ -8,20 +8,15 @@
 namespace archerfish::dsp {
 
 void ChirpSource::configure(const nlohmann::json& params) {
-    if (params.contains("amplitude"))
-        amplitude_ = params["amplitude"].get<double>();
+    configure_common(params);
     if (params.contains("f0_hz"))
         f0_hz_ = params["f0_hz"].get<double>();
     if (params.contains("f1_hz"))
         f1_hz_ = params["f1_hz"].get<double>();
-    if (params.contains("sample_rate"))
-        sample_rate_ = params["sample_rate"].get<double>();
-    if (params.contains("duration_sec"))
-        duration_sec_ = params["duration_sec"].get<double>();
 }
 
 void ChirpSource::prepare() {
-    samples_generated_ = 0;
+    reset_common();
 }
 
 size_t ChirpSource::render_block(std::complex<float>* out, size_t max_samples) {
@@ -29,10 +24,10 @@ size_t ChirpSource::render_block(std::complex<float>* out, size_t max_samples) {
         return 0;
 
     size_t total_samples = static_cast<size_t>(std::round(duration_sec_.value() * sample_rate_));
-    if (samples_generated_ >= total_samples)
+    if (samples_produced_ >= total_samples)
         return 0;
 
-    size_t remaining = total_samples - samples_generated_;
+    size_t remaining = total_samples - samples_produced_;
     size_t to_generate = std::min(max_samples, remaining);
 
     double duration = duration_sec_.value();
@@ -41,24 +36,23 @@ size_t ChirpSource::render_block(std::complex<float>* out, size_t max_samples) {
     double ts = 1.0 / sample_rate_;
 
     for (size_t i = 0; i < to_generate; ++i) {
-        double t = static_cast<double>(samples_generated_ + i) * ts;
+        double t = static_cast<double>(samples_produced_ + i) * ts;
         double phase = archerfish::constants::kTwoPi * (f0_hz_ * t + freq_slope * t * t / 2.0);
         float cos_p = static_cast<float>(std::cos(phase));
         float sin_p = static_cast<float>(std::sin(phase));
         out[i] = amp * std::complex<float>(cos_p, sin_p);
     }
 
-    samples_generated_ += to_generate;
+    samples_produced_ += to_generate;
     return to_generate;
 }
 
 WaveformMetadata ChirpSource::report_metadata() const {
     WaveformMetadata meta;
-    meta.sample_rate = sample_rate_;
+    fill_common_metadata(meta);
     meta.peak_amplitude = amplitude_;
     meta.rms_amplitude = amplitude_ / std::sqrt(2.0);
     meta.crest_factor = std::sqrt(2.0);
-    meta.duration_sec = duration_sec_;
     meta.repeats = false;
     double fmin = std::min(f0_hz_, f1_hz_);
     double fmax = std::max(f0_hz_, f1_hz_);
@@ -67,7 +61,7 @@ WaveformMetadata ChirpSource::report_metadata() const {
 }
 
 void ChirpSource::reset() {
-    samples_generated_ = 0;
+    reset_common();
 }
 
 } // namespace archerfish::dsp

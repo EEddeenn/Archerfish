@@ -6,6 +6,7 @@
 #include <spdlog/spdlog.h>
 
 #include "archerfish/dsp/source_factory.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
 
 #include "archerfish/impairments/impairment_chain.hpp"
 #include "archerfish/impairments/cfo.hpp"
@@ -19,8 +20,9 @@
 
 namespace archerfish::runtime {
 
-RenderWorker::RenderWorker(SampleQueue& output_queue, const RenderJob& job)
-    : queue_(output_queue), job_(job) {}
+RenderWorker::RenderWorker(SampleQueue& output_queue, const RenderJob& job,
+                           std::stop_source stop_src)
+    : queue_(output_queue), job_(job), stop_source_(std::move(stop_src)) {}
 
 void RenderWorker::start() {
     thread_ = std::thread(&RenderWorker::run, this);
@@ -32,6 +34,11 @@ void RenderWorker::join() {
     }
 }
 
+void RenderWorker::request_stop() {
+    stop_source_.request_stop();
+    queue_.notify_all();
+}
+
 bool RenderWorker::is_complete() const {
     return complete_.load(std::memory_order_acquire);
 }
@@ -41,10 +48,19 @@ size_t RenderWorker::samples_rendered() const {
 }
 
 void RenderWorker::run() {
-    std::string type = job_.waveform_config.value("type", "");
-    auto source = create_source(type);
+    auto stoken = stop_source_.get_token();
+
+    std::string type_str = job_.waveform_config.value("type", "");
+    auto type_result = dsp::waveform_type_from_string(type_str);
+    if (!type_result.has_value()) {
+        complete_.store(true, std::memory_order_release);
+        queue_.notify_all();
+        return;
+    }
+    auto source = dsp::create_source(*type_result);
     if (!source) {
         complete_.store(true, std::memory_order_release);
+        queue_.notify_all();
         return;
     }
 
@@ -89,6 +105,8 @@ void RenderWorker::run() {
     bool first_block = true;
 
     while (samples_rendered_.load(std::memory_order_relaxed) < total_target) {
+        if (stoken.stop_requested()) break;
+
         size_t remaining = total_target - samples_rendered_.load(std::memory_order_relaxed);
         size_t to_render = std::min(remaining, job_.block_size);
 
@@ -111,27 +129,25 @@ void RenderWorker::run() {
             block.end_of_burst = true;
         }
 
-        while (!queue_.push(std::move(block))) {
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-        }
+        if (!queue_.push_wait(std::move(block), stoken)) break;
 
         samples_rendered_.store(new_total, std::memory_order_release);
     }
 
-    if (samples_rendered_.load(std::memory_order_relaxed) < total_target && !first_block) {
+    if (!stoken.stop_requested() &&
+        samples_rendered_.load(std::memory_order_relaxed) < total_target && !first_block) {
         SampleBlock sentinel;
         sentinel.end_of_burst = true;
         sentinel.start_of_burst = false;
-        while (!queue_.push(std::move(sentinel))) {
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-        }
+        queue_.push_wait(std::move(sentinel), stoken);
     }
 
     spdlog::info("Render complete: {} samples, target {}", samples_rendered_.load(), total_target);
     complete_.store(true, std::memory_order_release);
+    queue_.notify_all();
 }
 
-std::unique_ptr<dsp::ISource> RenderWorker::create_source(const std::string& type) {
+std::unique_ptr<dsp::ISource> RenderWorker::create_source(dsp::WaveformType type) {
     return dsp::create_source(type);
 }
 

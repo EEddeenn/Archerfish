@@ -13,6 +13,18 @@ include(FetchContent)
 enable_testing()
 include(CTest)
 
+# --- Sanitizer options ---
+option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
+option(ENABLE_UBSAN "Enable Undefined Behavior Sanitizer" OFF)
+if(ENABLE_ASAN)
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address)
+endif()
+if(ENABLE_UBSAN)
+    add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=undefined)
+endif()
+
 # --- Dependencies (Homebrew + system) ---
 
 find_package(fmt REQUIRED)

@@ -1,0 +1,47 @@
+{
+  "metadata": { "name": "marker_demo" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 915000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 15.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "cw1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 2.0,
+      "waveform": {
+        "type": "cw",
+        "amplitude": 0.2
+      }
+    }
+  ],
+  "events": [
+    {
+      "target_device": "usrp0",
+      "time_sec": 0.0,
+      "type": "marker",
+      "payload": { "label": "tx_start" }
+    },
+    {
+      "target_device": "usrp0",
+      "time_sec": 0.5,
+      "type": "marker",
+      "payload": { "label": "dut_trigger" }
+    },
+    {
+      "target_device": "usrp0",
+      "time_sec": 1.5,
+      "type": "marker",
+      "payload": { "label": "measurement_window" }
+    }
+  ]
+}

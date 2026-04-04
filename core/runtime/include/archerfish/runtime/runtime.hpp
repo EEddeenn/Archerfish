@@ -1,12 +1,20 @@
 #pragma once
 
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <stop_token>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include "archerfish/hal/hal_device.hpp"
+#include "archerfish/runtime/event_dispatcher.hpp"
 #include "archerfish/runtime/render_worker.hpp"
 #include "archerfish/runtime/spsc_queue.hpp"
 #include "archerfish/runtime/state.hpp"
@@ -19,6 +27,15 @@ struct RuntimeConfig {
     size_t queue_capacity{64};
     size_t block_size{32768};
     uint32_t channel{0};
+};
+
+struct MixGroupJob {
+    std::string device_id;
+    uint32_t channel{0};
+    double start_sec{0.0};
+    double duration_sec{0.0};
+    double estimated_peak_sum{0.0};
+    std::vector<RenderJob> member_jobs;
 };
 
 class Runtime {
@@ -41,6 +58,7 @@ public:
         double actual_duration_sec{0.0};
     };
     [[nodiscard]] RunMetrics get_metrics() const;
+    [[nodiscard]] const std::vector<MarkerDispatch>& marker_dispatches() const;
 
 private:
     std::shared_ptr<hal::IHalDevice> device_;
@@ -48,10 +66,15 @@ private:
     StateMachine state_machine_;
     std::unique_ptr<SampleQueue> queue_;
     std::vector<RenderJob> render_jobs_;
+    std::vector<MixGroupJob> mix_group_jobs_;
     std::unique_ptr<TxWorker> active_tx_worker_;
     std::mutex active_tx_worker_mutex_;
     RunMetrics metrics_;
     scenario::Plan current_plan_;
+    std::stop_source stop_source_;
+    std::mutex abort_mutex_;
+    std::condition_variable abort_cv_;
+    std::vector<MarkerDispatch> marker_dispatches_;
 };
 
 } // namespace archerfish::runtime

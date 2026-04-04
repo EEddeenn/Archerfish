@@ -20,10 +20,16 @@ struct WaveformMetadata {
 
 class ISource {
 public:
+    ISource() = default;
     virtual ~ISource() = default;
+    ISource(const ISource&) = delete;
+    ISource& operator=(const ISource&) = delete;
+    ISource(ISource&&) = default;
+    ISource& operator=(ISource&&) = default;
+
     virtual void configure(const nlohmann::json& params) = 0;
     virtual void prepare() = 0;
-    virtual size_t render_block(std::complex<float>* out, size_t max_samples) = 0;
+    [[nodiscard]] virtual size_t render_block(std::complex<float>* out, size_t max_samples) = 0;
     virtual WaveformMetadata report_metadata() const = 0;
     virtual void reset() = 0;
 };

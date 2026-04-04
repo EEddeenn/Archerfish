@@ -107,6 +107,7 @@ int cmd_report_show(const CliOptions& opts, const std::string& run_id) {
 }
 
 int cmd_metrics_export(const CliOptions& opts, const std::string& run_id, const std::string& output_path) {
+    (void)opts;
     auto result = load_report_json(run_id);
     if (!result.has_value()) {
         fmt::print(stderr, "Error: {}\n", result.error());

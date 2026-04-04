@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include "archerfish/common/error.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
 
 namespace archerfish::scenario {
 
@@ -24,6 +25,12 @@ struct RfSettings {
     std::optional<double> bandwidth_hz;
     std::optional<std::string> antenna;
 
+    RfSettings() = default;
+    RfSettings(double f, double r, double g,
+               std::optional<double> bw = std::nullopt,
+               std::optional<std::string> ant = std::nullopt)
+        : freq_hz(f), rate_sps(r), gain_db(g), bandwidth_hz(std::move(bw)), antenna(std::move(ant)) {}
+
     [[nodiscard]] common::ErrorList validate() const;
 };
 
@@ -35,7 +42,7 @@ struct DeviceDef {
 
 struct WaveformDef {
     std::optional<std::string> id;
-    std::string type;
+    dsp::WaveformType type{dsp::WaveformType::Unknown};
     nlohmann::json params;
 };
 
@@ -53,6 +60,16 @@ struct ImpairmentSettings {
     std::optional<double> burst_dropout_rate;
 };
 
+enum class MixingMode {
+    None,
+    Additive
+};
+
+struct RepeatSpec {
+    int count{1};
+    double interval_sec{0.0};
+};
+
 struct EmitterDef {
     std::string id;
     std::string device;
@@ -62,6 +79,15 @@ struct EmitterDef {
     std::optional<WaveformDef> waveform;
     std::optional<std::string> waveform_ref;
     std::optional<ImpairmentSettings> impairments;
+    MixingMode mixing{MixingMode::None};
+    std::optional<RepeatSpec> repeat;
+};
+
+struct ScenarioEvent {
+    std::string target_device;
+    double time_sec{0.0};
+    std::string type;  // "retune", "gain_change", "marker", "burst"
+    nlohmann::json payload;
 };
 
 struct ReportingConfig {
@@ -74,6 +100,7 @@ struct Scenario {
     std::vector<DeviceDef> devices;
     std::vector<WaveformDef> waveforms;
     std::vector<EmitterDef> emitters;
+    std::vector<ScenarioEvent> events;
     ReportingConfig reporting;
 };
 

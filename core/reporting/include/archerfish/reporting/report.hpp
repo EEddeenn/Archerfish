@@ -16,6 +16,12 @@ struct DeviceInfo {
     uint32_t channel{0};
 };
 
+struct MarkerRecord {
+    std::string name;
+    double planned_time_sec{0.0};
+    double wall_clock_sec{0.0};
+};
+
 struct Report {
     std::string scenario_name;
     std::string scenario_hash;
@@ -28,6 +34,7 @@ struct Report {
     common::ErrorList warnings;
     common::ErrorList errors;
     std::vector<std::string> artifact_paths;
+    std::vector<MarkerRecord> marker_events;
 
     [[nodiscard]] nlohmann::json to_json() const;
     [[nodiscard]] static Report from_json(const nlohmann::json& j);

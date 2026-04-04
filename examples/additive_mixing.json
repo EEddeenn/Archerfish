@@ -1,0 +1,40 @@
+{
+  "metadata": { "name": "additive_mixing_demo" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2450000000.0,
+        "rate_sps": 20000000.0,
+        "gain_db": 20.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "cw_a",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 1.0,
+      "mixing": "additive",
+      "waveform": {
+        "type": "cw",
+        "amplitude": 0.2
+      }
+    },
+    {
+      "id": "cw_b",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.5,
+      "duration_sec": 1.0,
+      "mixing": "additive",
+      "waveform": {
+        "type": "cw",
+        "amplitude": 0.15
+      }
+    }
+  ]
+}

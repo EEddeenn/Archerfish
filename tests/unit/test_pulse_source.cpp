@@ -5,6 +5,7 @@
 #include <complex>
 #include <vector>
 
+#include "archerfish/common/constants.hpp"
 #include "archerfish/dsp/pulse_source.hpp"
 
 using namespace archerfish::dsp;
@@ -92,7 +93,7 @@ TEST_CASE("PulseSource phase advances during OFF periods", "[dsp][pulse]") {
     src.prepare();
 
     size_t pri_samples = static_cast<size_t>(std::round(pri * fs));
-    size_t pw_samples = static_cast<size_t>(std::round(pw * fs));
+    (void)static_cast<size_t>(std::round(pw * fs));
 
     std::vector<std::complex<float>> buf1(pri_samples);
     std::vector<std::complex<float>> buf2(pri_samples);
@@ -101,13 +102,13 @@ TEST_CASE("PulseSource phase advances during OFF periods", "[dsp][pulse]") {
     src.render_block(buf2.data(), buf2.size());
 
     float phase_at_start_of_pulse2 = std::arg(buf2[0]);
-    double expected_phase = 2.0 * M_PI * freq / fs * static_cast<double>(pri_samples);
-    expected_phase = std::fmod(expected_phase, 2.0 * M_PI);
-    if (expected_phase > M_PI) expected_phase -= 2.0 * M_PI;
+    double expected_phase = 2.0 * archerfish::constants::kPi * freq / fs * static_cast<double>(pri_samples);
+    expected_phase = std::fmod(expected_phase, 2.0 * archerfish::constants::kPi);
+    if (expected_phase > archerfish::constants::kPi) expected_phase -= 2.0 * archerfish::constants::kPi;
 
     float diff = std::abs(phase_at_start_of_pulse2 - static_cast<float>(expected_phase));
-    if (diff > static_cast<float>(M_PI))
-        diff = 2.0f * static_cast<float>(M_PI) - diff;
+    if (diff > static_cast<float>(archerfish::constants::kPi))
+        diff = 2.0f * static_cast<float>(archerfish::constants::kPi) - diff;
     REQUIRE_THAT(diff, WithinAbs(0.0f, 0.01f));
 }
 

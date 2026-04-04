@@ -2,12 +2,11 @@
 
 #include <complex>
 #include <cstddef>
-#include <optional>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
-#include "archerfish/dsp/source.hpp"
+#include "archerfish/dsp/source_base.hpp"
 
 namespace archerfish::dsp {
 
@@ -16,7 +15,7 @@ struct ToneSpec {
     double amplitude{0.2};
 };
 
-class MultiToneSource : public ISource {
+class MultiToneSource : public SourceBase {
 public:
     void configure(const nlohmann::json& params) override;
     void prepare() override;
@@ -26,9 +25,6 @@ public:
 
 private:
     std::vector<ToneSpec> tones_;
-    double sample_rate_{1e6};
-    std::optional<double> duration_sec_;
-    size_t samples_generated_{0};
 };
 
 } // namespace archerfish::dsp

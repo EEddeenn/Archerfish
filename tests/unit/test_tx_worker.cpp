@@ -17,12 +17,12 @@ TEST_CASE("TxWorker sends blocks through queue to device", "[runtime][tx]") {
     SampleBlock block1;
     block1.samples = {{1.0f, 0.0f}, {0.0f, 1.0f}, {-1.0f, 0.0f}};
     block1.start_of_burst = true;
-    REQUIRE(queue.push(std::move(block1)));
+    REQUIRE(queue.push_notify(std::move(block1)));
 
     SampleBlock block2;
     block2.samples = {{0.5f, 0.5f}, {-0.5f, -0.5f}};
     block2.end_of_burst = true;
-    REQUIRE(queue.push(std::move(block2)));
+    REQUIRE(queue.push_notify(std::move(block2)));
 
     worker.join();
 
@@ -46,7 +46,7 @@ TEST_CASE("TxWorker total samples_sent matches expected", "[runtime][tx]") {
         total += 100;
         if (i == 0) block.start_of_burst = true;
         if (i == 2) block.end_of_burst = true;
-        REQUIRE(queue.push(std::move(block)));
+        REQUIRE(queue.push_notify(std::move(block)));
     }
 
     worker.join();
@@ -65,12 +65,12 @@ TEST_CASE("TxWorker start_of_burst and end_of_burst metadata", "[runtime][tx]") 
     SampleBlock first;
     first.samples = {{1.0f, 0.0f}};
     first.start_of_burst = true;
-    REQUIRE(queue.push(std::move(first)));
+    REQUIRE(queue.push_notify(std::move(first)));
 
     SampleBlock last;
     last.samples = {{0.0f, 1.0f}};
     last.end_of_burst = true;
-    REQUIRE(queue.push(std::move(last)));
+    REQUIRE(queue.push_notify(std::move(last)));
 
     worker.join();
 
@@ -99,7 +99,7 @@ TEST_CASE("TxWorker graceful shutdown via request_stop", "[runtime][tx]") {
     block.samples = {{1.0f, 0.0f}};
     block.start_of_burst = true;
     block.end_of_burst = true;
-    REQUIRE(queue.push(std::move(block)));
+    REQUIRE(queue.push_notify(std::move(block)));
 
     worker.request_stop();
     worker.join();
@@ -119,7 +119,7 @@ TEST_CASE("TxWorker metrics are accessible", "[runtime][tx]") {
     block.samples = {{1.0f, 0.0f}, {2.0f, 0.0f}};
     block.start_of_burst = true;
     block.end_of_burst = true;
-    REQUIRE(queue.push(std::move(block)));
+    REQUIRE(queue.push_notify(std::move(block)));
 
     worker.join();
 

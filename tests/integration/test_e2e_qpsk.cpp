@@ -9,10 +9,12 @@
 #include "archerfish/runtime/runtime.hpp"
 
 #include <filesystem>
+#include "archerfish/dsp/waveform_type.hpp"
 
 using namespace archerfish::scenario;
 using namespace archerfish::runtime;
 using namespace archerfish::hal;
+using WaveformType = archerfish::dsp::WaveformType;
 using namespace archerfish::common;
 using Catch::Matchers::WithinAbs;
 
@@ -26,7 +28,7 @@ TEST_CASE("E2E QPSK: parse qpsk_burst through full pipeline", "[e2e][qpsk]") {
     auto& scenario = *parse_result;
     REQUIRE(scenario.metadata.name == "qpsk_burst");
     REQUIRE(scenario.emitters.size() == 1);
-    REQUIRE(scenario.emitters[0].waveform->type == "qpsk");
+    REQUIRE(scenario.emitters[0].waveform->type == WaveformType::QPSK);
 
     REQUIRE(resolve_waveform_refs(scenario).empty());
     REQUIRE(validate(scenario).ok());
@@ -37,7 +39,7 @@ TEST_CASE("E2E QPSK: parse qpsk_burst through full pipeline", "[e2e][qpsk]") {
     const auto& p = plan_result.value();
     REQUIRE(p.render_instructions.size() == 1);
     REQUIRE(p.timeline.size() == 2);
-    REQUIRE(p.render_instructions[0].waveform.type == "qpsk");
+    REQUIRE(p.render_instructions[0].waveform.type == WaveformType::QPSK);
     REQUIRE_THAT(p.render_instructions[0].start_sec, WithinAbs(1.5, 1e-9));
     REQUIRE_THAT(p.render_instructions[0].duration_sec, WithinAbs(0.10, 1e-12));
     REQUIRE_THAT(p.render_instructions[0].sample_rate, WithinAbs(8e6, 1.0));

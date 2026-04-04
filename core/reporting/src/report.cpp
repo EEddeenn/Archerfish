@@ -38,6 +38,15 @@ nlohmann::json Report::to_json() const {
         errors_arr.push_back(scenario::error_to_json(e));
     }
 
+    nlohmann::json markers_arr = nlohmann::json::array();
+    for (const auto& m : marker_events) {
+        markers_arr.push_back({
+            {"name", m.name},
+            {"planned_time_sec", m.planned_time_sec},
+            {"wall_clock_sec", m.wall_clock_sec},
+        });
+    }
+
     return {
         {"scenario_name", scenario_name},
         {"scenario_hash", scenario_hash},
@@ -50,6 +59,7 @@ nlohmann::json Report::to_json() const {
         {"warnings", warnings_arr},
         {"errors", errors_arr},
         {"artifact_paths", artifact_paths},
+        {"marker_events", markers_arr},
     };
 }
 
@@ -76,6 +86,17 @@ Report Report::from_json(const nlohmann::json& j) {
     }
 
     r.artifact_paths = j.at("artifact_paths").get<std::vector<std::string>>();
+
+    if (j.contains("marker_events") && j.at("marker_events").is_array()) {
+        for (const auto& mj : j.at("marker_events")) {
+            MarkerRecord mr;
+            mr.name = mj.at("name").get<std::string>();
+            mr.planned_time_sec = mj.at("planned_time_sec").get<double>();
+            mr.wall_clock_sec = mj.at("wall_clock_sec").get<double>();
+            r.marker_events.push_back(std::move(mr));
+        }
+    }
+
     return r;
 }
 

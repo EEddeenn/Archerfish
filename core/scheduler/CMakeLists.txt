@@ -21,7 +21,9 @@ target_compile_definitions(archerfish_scheduler
 target_link_libraries(archerfish_scheduler
     PUBLIC
         archerfish_common
+        archerfish_dsp
     PRIVATE
         nlohmann_json::nlohmann_json
         nlohmann_json_schema_validator::validator
+        fmt::fmt
 )

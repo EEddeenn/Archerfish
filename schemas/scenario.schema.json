@@ -51,6 +51,34 @@
         "$ref": "#/$defs/emitter"
       }
     },
+    "events": {
+      "type": "array",
+      "description": "Timed control events for retune, gain changes, and markers",
+      "items": {
+        "type": "object",
+        "required": ["target_device", "time_sec", "type"],
+        "properties": {
+          "target_device": {
+            "type": "string",
+            "description": "Target device ID"
+          },
+          "time_sec": {
+            "type": "number",
+            "description": "Event dispatch time in seconds",
+            "minimum": 0
+          },
+          "type": {
+            "type": "string",
+            "description": "Event type",
+            "enum": ["retune", "gain_change", "marker", "burst"]
+          },
+          "payload": {
+            "type": "object",
+            "description": "Event-specific parameters"
+          }
+        }
+      }
+    },
     "reporting": {
       "type": "object",
       "description": "Reporting and output configuration",
@@ -143,6 +171,8 @@
             "8psk",
             "qam16",
             "qam64",
+            "apsk16",
+            "apsk32",
             "multi_tone",
             "file",
             "pulse",
@@ -150,7 +180,8 @@
             "fsk",
             "am",
             "fm",
-            "pm"
+            "pm",
+            "ofdm"
           ]
         }
       },
@@ -260,6 +291,28 @@
         "impairments": {
           "$ref": "#/$defs/impairments",
           "description": "Optional channel impairments"
+        },
+        "mixing": {
+          "type": "string",
+          "description": "Mixing mode for overlapping emitters on same channel",
+          "enum": ["none", "additive"],
+          "default": "none"
+        },
+        "repeat": {
+          "type": "object",
+          "description": "Burst repeat specification",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "description": "Number of repetitions",
+              "minimum": 1
+            },
+            "interval_sec": {
+              "type": "number",
+              "description": "Time between burst starts in seconds",
+              "exclusiveMinimum": 0
+            }
+          }
         }
       }
     }

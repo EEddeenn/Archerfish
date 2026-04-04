@@ -15,8 +15,6 @@ std::vector<float> RrcFilterDesign::design() const {
     size_t ntaps = span_symbols * samples_per_symbol + 1;
     std::vector<float> taps(ntaps);
 
-    double ts = 1.0 / static_cast<double>(samples_per_symbol);
-
     for (size_t i = 0; i < ntaps; ++i) {
         double t_norm = (static_cast<double>(i) - static_cast<double>(ntaps - 1) / 2.0) / static_cast<double>(samples_per_symbol);
 

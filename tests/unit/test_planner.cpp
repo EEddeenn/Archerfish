@@ -1,3 +1,7 @@
+#include "archerfish/scenario/parser.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
+using archerfish::dsp::WaveformType;
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -21,7 +25,7 @@ Scenario make_simple_scenario() {
     em.channel = 0;
     em.start_after_sec = 1.0;
     em.duration_sec = 5.0;
-    em.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"amplitude", 0.5}}};
+    em.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"amplitude", 0.5}}};
     s.emitters.push_back(em);
 
     return s;
@@ -39,7 +43,7 @@ Scenario make_multi_emitter_same_device_scenario() {
     em1.channel = 0;
     em1.start_after_sec = 1.0;
     em1.duration_sec = 3.0;
-    em1.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"amplitude", 0.5}}};
+    em1.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"amplitude", 0.5}}};
     s.emitters.push_back(em1);
 
     EmitterDef em2;
@@ -48,7 +52,7 @@ Scenario make_multi_emitter_same_device_scenario() {
     em2.channel = 0;
     em2.start_after_sec = 2.0;
     em2.duration_sec = 4.0;
-    em2.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"amplitude", 0.3}}};
+    em2.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"amplitude", 0.3}}};
     s.emitters.push_back(em2);
 
     return s;
@@ -67,7 +71,7 @@ Scenario make_multi_device_scenario() {
     em1.channel = 0;
     em1.start_after_sec = 1.0;
     em1.duration_sec = 5.0;
-    em1.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"amplitude", 0.5}}};
+    em1.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"amplitude", 0.5}}};
     s.emitters.push_back(em1);
 
     EmitterDef em2;
@@ -76,7 +80,7 @@ Scenario make_multi_device_scenario() {
     em2.channel = 0;
     em2.start_after_sec = 0.5;
     em2.duration_sec = 3.0;
-    em2.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"amplitude", 0.3}}};
+    em2.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"amplitude", 0.3}}};
     s.emitters.push_back(em2);
 
     return s;
@@ -119,7 +123,7 @@ TEST_CASE("Single emitter produces 1 render instruction", "[planner]") {
     const auto& p = result.value();
     REQUIRE(p.render_instructions.size() == 1);
     REQUIRE(p.render_instructions[0].emitter_id == "cw1");
-    REQUIRE(p.render_instructions[0].waveform.type == "cw");
+    REQUIRE(p.render_instructions[0].waveform.type == WaveformType::CW);
     REQUIRE_THAT(p.render_instructions[0].start_sec, WithinAbs(1.0, 1e-12));
     REQUIRE_THAT(p.render_instructions[0].duration_sec, WithinAbs(5.0, 1e-12));
     REQUIRE_THAT(p.render_instructions[0].sample_rate, WithinAbs(10e6, 1.0));
@@ -222,7 +226,7 @@ TEST_CASE("Warning emitted for emitter starting at time 0", "[planner]") {
     em.channel = 0;
     em.start_after_sec = 0.0;
     em.duration_sec = 5.0;
-    em.waveform = WaveformDef{std::nullopt, "cw", nlohmann::json{{"amplitude", 0.5}}};
+    em.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"amplitude", 0.5}}};
     s.emitters.push_back(em);
 
     auto result = plan(s);
@@ -256,7 +260,7 @@ TEST_CASE("Waveform ref resolved from named waveforms", "[planner]") {
 
     s.devices.push_back({"usrp0", 0, {2.45e9, 10e6, 20.0}});
 
-    s.waveforms.push_back({"my_chirp", "chirp", nlohmann::json{{"f0_hz", -2e6}, {"f1_hz", 2e6}}});
+    s.waveforms.push_back(WaveformDef{"my_chirp", WaveformType::Chirp, nlohmann::json{{"f0_hz", -2e6}, {"f1_hz", 2e6}}});
 
     EmitterDef em;
     em.id = "em1";
@@ -272,7 +276,7 @@ TEST_CASE("Waveform ref resolved from named waveforms", "[planner]") {
 
     const auto& p = result.value();
     REQUIRE(p.render_instructions.size() == 1);
-    REQUIRE(p.render_instructions[0].waveform.type == "chirp");
+    REQUIRE(p.render_instructions[0].waveform.type == WaveformType::Chirp);
     REQUIRE(p.render_instructions[0].waveform.id.has_value());
     REQUIRE(*p.render_instructions[0].waveform.id == "my_chirp");
 }

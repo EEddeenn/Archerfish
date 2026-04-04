@@ -1,0 +1,30 @@
+{
+  "metadata": { "name": "apsk16_burst" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 12000000000.0,
+        "rate_sps": 20000000.0,
+        "gain_db": 18.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "apsk16_1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 0.05,
+      "waveform": {
+        "type": "apsk16",
+        "symbol_rate": 1000000.0,
+        "samples_per_symbol": 8,
+        "rrc_alpha": 0.35,
+        "amplitude": 0.2
+      }
+    }
+  ]
+}

@@ -5,6 +5,8 @@
 #include "archerfish/cli/cmd_doctor.hpp"
 #include "archerfish/cli/cmd_report.hpp"
 #include "archerfish/cli/cmd_dryrun.hpp"
+#include "archerfish/cli/cmd_schema.hpp"
+#include "archerfish/cli/cmd_calib.hpp"
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
@@ -41,6 +43,15 @@ struct CommandRegistry {
     double mod_freq{1000.0};
     double mod_depth{0.5};
     double mod_index{1.0};
+
+    int fft_size{64};
+    int cp_size{16};
+    int active_subcarriers{60};
+
+    uint32_t channel{0};
+    bool schema_json{false};
+    bool schema_markdown{false};
+    bool calib_all_channels{false};
 
     std::function<int()> execute;
 };
@@ -175,6 +186,34 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
     wave_gen_pm->add_option("-o,--output", reg->output_path, "Output file")->required();
     wave_gen_pm->callback([&opts, &r = *reg]() { return cmd_wave_gen_pm(opts, r.rate, r.duration, r.amplitude, r.carrier_freq, r.mod_freq, r.mod_index, r.output_path); });
 
+    auto* wave_gen_apsk16 = wave_gen->add_subcommand("apsk16", "Generate 16-APSK waveform (DVB-S2)");
+    wave_gen_apsk16->add_option("--symbol-rate", reg->symbol_rate, "Symbol rate (Hz)")->required();
+    wave_gen_apsk16->add_option("--sps", reg->sps, "Samples per symbol")->default_val("4");
+    wave_gen_apsk16->add_option("--rrc", reg->rrc_alpha, "RRC roll-off factor")->default_val("0.35");
+    wave_gen_apsk16->add_option("--duration", reg->duration, "Duration (seconds)")->required();
+    wave_gen_apsk16->add_option("--amplitude", reg->amplitude, "Amplitude")->default_val("0.2");
+    wave_gen_apsk16->add_option("-o,--output", reg->output_path, "Output file")->required();
+    wave_gen_apsk16->callback([&opts, &r = *reg]() { return cmd_wave_gen_apsk16(opts, r.symbol_rate, r.sps, r.rrc_alpha, r.duration, r.amplitude, r.output_path); });
+
+    auto* wave_gen_apsk32 = wave_gen->add_subcommand("apsk32", "Generate 32-APSK waveform (DVB-S2)");
+    wave_gen_apsk32->add_option("--symbol-rate", reg->symbol_rate, "Symbol rate (Hz)")->required();
+    wave_gen_apsk32->add_option("--sps", reg->sps, "Samples per symbol")->default_val("4");
+    wave_gen_apsk32->add_option("--rrc", reg->rrc_alpha, "RRC roll-off factor")->default_val("0.35");
+    wave_gen_apsk32->add_option("--duration", reg->duration, "Duration (seconds)")->required();
+    wave_gen_apsk32->add_option("--amplitude", reg->amplitude, "Amplitude")->default_val("0.2");
+    wave_gen_apsk32->add_option("-o,--output", reg->output_path, "Output file")->required();
+    wave_gen_apsk32->callback([&opts, &r = *reg]() { return cmd_wave_gen_apsk32(opts, r.symbol_rate, r.sps, r.rrc_alpha, r.duration, r.amplitude, r.output_path); });
+
+    auto* wave_gen_ofdm = wave_gen->add_subcommand("ofdm", "Generate OFDM waveform");
+    wave_gen_ofdm->add_option("--rate", reg->rate, "Sample rate (Hz)")->required();
+    wave_gen_ofdm->add_option("--duration", reg->duration, "Duration (seconds)")->required();
+    wave_gen_ofdm->add_option("--amplitude", reg->amplitude, "Amplitude")->default_val("0.2");
+    wave_gen_ofdm->add_option("--fft-size", reg->fft_size, "FFT size (power of 2)")->default_val("64");
+    wave_gen_ofdm->add_option("--cp-size", reg->cp_size, "Cyclic prefix size (samples)")->default_val("16");
+    wave_gen_ofdm->add_option("--active-subcarriers", reg->active_subcarriers, "Number of active subcarriers")->default_val("60");
+    wave_gen_ofdm->add_option("-o,--output", reg->output_path, "Output file")->required();
+    wave_gen_ofdm->callback([&opts, &r = *reg]() { return cmd_wave_gen_ofdm(opts, r.rate, r.duration, r.amplitude, r.fft_size, r.cp_size, r.active_subcarriers, r.output_path); });
+
     auto* wave_inspect = wave->add_subcommand("inspect", "Inspect a waveform file");
     wave_inspect->add_option("file", reg->file_path, "Waveform file")->required()->check(CLI::ExistingFile);
     wave_inspect->add_flag("--json", opts.json_output, "Output as JSON");
@@ -206,6 +245,34 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
     // --- doctor subcommand ---
     auto* doctor_cmd = app->add_subcommand("doctor", "Run diagnostics");
     doctor_cmd->callback([&opts]() { return cmd_doctor(opts); });
+
+    // --- schema subcommand ---
+    auto* schema_cmd = app->add_subcommand("schema", "Schema operations");
+    auto* schema_print = schema_cmd->add_subcommand("print", "Print schema information");
+    schema_print->add_flag("--json", reg->schema_json, "Output raw JSON schema");
+    schema_print->add_flag("--markdown", reg->schema_markdown, "Output markdown table of waveform types");
+    schema_print->callback([&opts, &r = *reg]() { return cmd_schema_print(opts, r.schema_json, r.schema_markdown); });
+
+    // --- calib subcommand ---
+    auto* calib_cmd = app->add_subcommand("calib", "Calibration management");
+
+    auto* calib_init = calib_cmd->add_subcommand("init", "Initialize a calibration file");
+    calib_init->add_option("--device", reg->device_id, "Device ID")->required();
+    calib_init->add_option("--channel", reg->channel, "Channel number")->required();
+    calib_init->callback([&opts, &r = *reg]() { return cmd_calib_init(opts, r.device_id, r.channel); });
+
+    auto* calib_show = calib_cmd->add_subcommand("show", "Show calibration data");
+    calib_show->add_option("--device", reg->device_id, "Device ID");
+    calib_show->add_option("--channel", reg->channel, "Channel number")->default_val("0");
+    calib_show->add_flag("--all", reg->calib_all_channels, "Show all channels for device");
+    calib_show->add_flag("--json", opts.json_output, "Output as JSON");
+    calib_show->callback([&opts, &r = *reg]() { return cmd_calib_show(opts, r.device_id, r.channel, r.calib_all_channels); });
+
+    auto* calib_import = calib_cmd->add_subcommand("import", "Import calibration data from file");
+    calib_import->add_option("file", reg->file_path, "Calibration JSON file")->required()->check(CLI::ExistingFile);
+    calib_import->add_option("--device", reg->device_id, "Device ID")->required();
+    calib_import->add_option("--channel", reg->channel, "Channel number")->required();
+    calib_import->callback([&opts, &r = *reg]() { return cmd_calib_import(opts, r.file_path, r.device_id, r.channel); });
 
     app->require_subcommand(1);
 

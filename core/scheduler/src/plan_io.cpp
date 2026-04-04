@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "archerfish/dsp/waveform_type.hpp"
+
 namespace archerfish::scenario {
 
 namespace {
@@ -53,7 +55,7 @@ std::expected<RfSettings, common::ErrorList> rf_settings_from_json(const nlohman
 nlohmann::json waveform_def_to_json(const WaveformDef& wf) {
     nlohmann::json j;
     if (wf.id.has_value()) j["id"] = *wf.id;
-    j["type"] = wf.type;
+    j["type"] = dsp::to_string(wf.type);
     j["params"] = wf.params;
     return j;
 }
@@ -61,7 +63,16 @@ nlohmann::json waveform_def_to_json(const WaveformDef& wf) {
 std::expected<WaveformDef, common::ErrorList> waveform_def_from_json(const nlohmann::json& j) {
     WaveformDef wf;
     if (j.contains("id")) wf.id = j["id"].get<std::string>();
-    if (j.contains("type")) wf.type = j["type"].get<std::string>();
+    if (j.contains("type")) {
+        auto type_str = j["type"].get<std::string>();
+        auto type_result = dsp::waveform_type_from_string(type_str);
+        if (!type_result.has_value()) {
+            return std::unexpected(common::ErrorList{
+                {common::ErrorCategory::Planning, "E_PLAN_IO_BAD_WAVEFORM_TYPE",
+                 "Unknown waveform type in plan JSON: " + type_str}});
+        }
+        wf.type = *type_result;
+    }
     if (j.contains("params")) wf.params = j["params"];
     return wf;
 }

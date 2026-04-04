@@ -7,12 +7,14 @@
 #include "archerfish/scenario/plan_io.hpp"
 #include "archerfish/hal/stub_device.hpp"
 #include "archerfish/runtime/runtime.hpp"
+#include "archerfish/dsp/waveform_type.hpp"
 
 #include <filesystem>
 
 using namespace archerfish::scenario;
 using namespace archerfish::runtime;
 using namespace archerfish::hal;
+using WaveformType = archerfish::dsp::WaveformType;
 using namespace archerfish::common;
 using Catch::Matchers::WithinAbs;
 
@@ -26,7 +28,7 @@ TEST_CASE("E2E Chirp: parse chirp_burst through full pipeline", "[e2e][chirp]") 
     auto& scenario = *parse_result;
     REQUIRE(scenario.metadata.name == "chirp_burst");
     REQUIRE(scenario.emitters.size() == 1);
-    REQUIRE(scenario.emitters[0].waveform->type == "chirp");
+    REQUIRE(scenario.emitters[0].waveform->type == WaveformType::Chirp);
 
     REQUIRE(resolve_waveform_refs(scenario).empty());
     REQUIRE(validate(scenario).ok());
@@ -37,7 +39,7 @@ TEST_CASE("E2E Chirp: parse chirp_burst through full pipeline", "[e2e][chirp]") 
     const auto& p = plan_result.value();
     REQUIRE(p.render_instructions.size() == 1);
     REQUIRE(p.timeline.size() == 2);
-    REQUIRE(p.render_instructions[0].waveform.type == "chirp");
+    REQUIRE(p.render_instructions[0].waveform.type == WaveformType::Chirp);
     REQUIRE_THAT(p.render_instructions[0].start_sec, WithinAbs(1.0, 1e-9));
     REQUIRE_THAT(p.render_instructions[0].duration_sec, WithinAbs(0.02, 1e-12));
     REQUIRE_THAT(p.render_instructions[0].sample_rate, WithinAbs(20e6, 1.0));

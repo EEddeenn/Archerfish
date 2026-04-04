@@ -2,16 +2,15 @@
 
 #include <complex>
 #include <cstddef>
-#include <optional>
 #include <random>
 
 #include <nlohmann/json.hpp>
 
-#include "archerfish/dsp/source.hpp"
+#include "archerfish/dsp/source_base.hpp"
 
 namespace archerfish::dsp {
 
-class NoiseSource : public ISource {
+class NoiseSource : public SourceBase {
 public:
     void configure(const nlohmann::json& params) override;
     void prepare() override;
@@ -20,13 +19,8 @@ public:
     void reset() override;
 
 private:
-    double amplitude_{0.2};
-    double sample_rate_{1e6};
-    std::optional<double> duration_sec_;
-    uint32_t seed_{42};
     std::mt19937 rng_;
     std::normal_distribution<float> dist_;
-    size_t samples_generated_{0};
 };
 
 } // namespace archerfish::dsp

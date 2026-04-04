@@ -9,12 +9,14 @@
 
 #include <complex>
 #include <filesystem>
+#include "archerfish/dsp/waveform_type.hpp"
 #include <fstream>
 #include <vector>
 
 using namespace archerfish::scenario;
 using namespace archerfish::runtime;
 using namespace archerfish::hal;
+using WaveformType = archerfish::dsp::WaveformType;
 using namespace archerfish::common;
 using Catch::Matchers::WithinAbs;
 
@@ -63,7 +65,7 @@ TEST_CASE("E2E Replay: file waveform plays known samples", "[e2e][replay]") {
 
     auto& scenario = *parse_result;
     REQUIRE(scenario.emitters.size() == 1);
-    REQUIRE(scenario.emitters[0].waveform->type == "file");
+    REQUIRE(scenario.emitters[0].waveform->type == WaveformType::File);
 
     REQUIRE(resolve_waveform_refs(scenario).empty());
     auto validation = validate(scenario);
@@ -74,7 +76,7 @@ TEST_CASE("E2E Replay: file waveform plays known samples", "[e2e][replay]") {
 
     const auto& p = plan_result.value();
     REQUIRE(p.render_instructions.size() == 1);
-    REQUIRE(p.render_instructions[0].waveform.type == "file");
+    REQUIRE(p.render_instructions[0].waveform.type == WaveformType::File);
 
     auto device = std::make_shared<StubDevice>();
     RuntimeConfig config;

@@ -5,11 +5,13 @@
 namespace archerfish::cli {
 
 int cmd_version(const CliOptions& opts) {
+    (void)opts;
     fmt::print("archerfish v0.1.0\n");
     return 0;
 }
 
 int cmd_doctor(const CliOptions& opts) {
+    (void)opts;
     bool all_ok = true;
 
     fmt::print("archerfish doctor — diagnostics\n\n");

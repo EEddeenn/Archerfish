@@ -9,27 +9,20 @@
 namespace archerfish::dsp {
 
 void AskSource::configure(const nlohmann::json& params) {
-    if (params.contains("amplitude"))
-        amplitude_ = params["amplitude"].get<double>();
+    configure_common(params);
     if (params.contains("frequency_hz"))
         frequency_hz_ = params["frequency_hz"].get<double>();
-    if (params.contains("sample_rate"))
-        sample_rate_ = params["sample_rate"].get<double>();
     if (params.contains("symbol_rate"))
         symbol_rate_ = params["symbol_rate"].get<double>();
     if (params.contains("num_levels"))
         num_levels_ = params["num_levels"].get<int>();
-    if (params.contains("duration_sec"))
-        duration_sec_ = params["duration_sec"].get<double>();
-    if (params.contains("seed"))
-        seed_ = params["seed"].get<uint32_t>();
 }
 
 void AskSource::prepare() {
     samples_per_symbol_ = static_cast<size_t>(std::round(sample_rate_ / symbol_rate_));
-    rng_.seed(seed_);
+    rng_.seed(seed());
     phase_ = 0.0;
-    samples_generated_ = 0;
+    reset_common();
     samples_within_symbol_ = 0;
     generate_next_symbol();
 }
@@ -53,15 +46,9 @@ void AskSource::generate_next_symbol() {
 }
 
 size_t AskSource::render_block(std::complex<float>* out, size_t max_samples) {
-    size_t total_available = std::numeric_limits<size_t>::max();
-    if (duration_sec_.has_value()) {
-        size_t total_samples = static_cast<size_t>(std::round(duration_sec_.value() * sample_rate_));
-        if (samples_generated_ >= total_samples)
-            return 0;
-        total_available = total_samples - samples_generated_;
-    }
-
-    size_t to_generate = std::min(max_samples, total_available);
+    size_t to_generate = compute_block_size(max_samples);
+    if (to_generate == 0)
+        return 0;
 
     const double phase_inc = archerfish::constants::kTwoPi * frequency_hz_ / sample_rate_;
     const double two_pi = archerfish::constants::kTwoPi;
@@ -80,15 +67,13 @@ size_t AskSource::render_block(std::complex<float>* out, size_t max_samples) {
         }
     }
 
-    samples_generated_ += to_generate;
+    samples_produced_ += to_generate;
     return to_generate;
 }
 
 WaveformMetadata AskSource::report_metadata() const {
     WaveformMetadata meta;
-    meta.sample_rate = sample_rate_;
-    meta.duration_sec = duration_sec_;
-    meta.repeats = !duration_sec_.has_value();
+    fill_common_metadata(meta);
     meta.nominal_bandwidth = 0.0;
 
     int M = num_levels_;
@@ -111,9 +96,9 @@ WaveformMetadata AskSource::report_metadata() const {
 }
 
 void AskSource::reset() {
-    rng_.seed(seed_);
+    rng_.seed(seed());
+    reset_common();
     phase_ = 0.0;
-    samples_generated_ = 0;
     samples_within_symbol_ = 0;
     generate_next_symbol();
 }

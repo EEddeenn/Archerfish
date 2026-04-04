@@ -5,6 +5,7 @@
 #include <complex>
 #include <vector>
 
+#include "archerfish/common/constants.hpp"
 #include "archerfish/dsp/chirp_source.hpp"
 
 using namespace archerfish::dsp;
@@ -23,11 +24,10 @@ TEST_CASE("Chirp start frequency matches f0", "[dsp][chirp]") {
     size_t n = src.render_block(buf.data(), buf.size());
     REQUIRE(n == 3);
 
-    double dt = 1.0 / fs;
     double freq_slope = (f1 - f0) / dur;
 
     double t0 = 0.0;
-    double phase0 = 2.0 * M_PI * (f0 * t0 + freq_slope * t0 * t0 / 2.0);
+    double phase0 = 2.0 * archerfish::constants::kPi * (f0 * t0 + freq_slope * t0 * t0 / 2.0);
     REQUIRE_THAT(buf[0].real(), WithinAbs(static_cast<float>(std::cos(phase0)), 1e-5f));
     REQUIRE_THAT(buf[0].imag(), WithinAbs(static_cast<float>(std::sin(phase0)), 1e-5f));
 }
@@ -49,7 +49,7 @@ TEST_CASE("Chirp end frequency approaches f1", "[dsp][chirp]") {
     size_t last = total_samples - 1;
     double t_last = static_cast<double>(last) / fs;
     double freq_slope = (f1 - f0) / dur;
-    double phase_last = 2.0 * M_PI * (f0 * t_last + freq_slope * t_last * t_last / 2.0);
+    double phase_last = 2.0 * archerfish::constants::kPi * (f0 * t_last + freq_slope * t_last * t_last / 2.0);
     REQUIRE_THAT(buf[last].real(), WithinAbs(static_cast<float>(std::cos(phase_last)), 1e-4f));
 }
 
