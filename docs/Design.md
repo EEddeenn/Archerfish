@@ -1358,9 +1358,10 @@ Repository root is `archerfish/`. The earlier ambiguity is removed.
 ```text
 archerfish/
 ├── CMakeLists.txt
+├── CMakePresets.json
 ├── docs/
 │   ├── Design.md
-│   └── plans/
+│   └── building.md
 ├── schemas/
 │   └── scenario.schema.json
 ├── core/
@@ -1372,6 +1373,10 @@ archerfish/
 │   ├── reporting/
 │   └── common/
 ├── cli/
+├── cmake/
+│   ├── CompilerWarnings.cmake
+│   ├── archerfish-config.cmake.in
+│   └── Modules/
 ├── examples/
 ├── tests/
 │   ├── unit/
@@ -1379,9 +1384,10 @@ archerfish/
 ```
 
 **Notes on current state:**
-- `schemas/scenario.schema.json` exists and covers all Phase 1 and Phase 2 waveform types and impairments.
-- `presets/` directory has been removed; future preset templates will be added as needed.
-- `tools/` and `packaging/` directories are not present in the current codebase and are deferred to a later phase.
+- `schemas/scenario.schema.json` covers all waveform types and impairments.
+- `cmake/Modules/FindSampleRate.cmake` handles libsamplerate discovery.
+- `CMakePresets.json` provides `dev`, `dev-sanitize`, `release`, and `ci` presets.
+- Build instructions are in `docs/building.md`.
 
 ---
 

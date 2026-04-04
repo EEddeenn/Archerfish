@@ -21,7 +21,14 @@ target_link_libraries(archerfish_hal
 )
 
 if(UHD_FOUND)
-    target_link_libraries(archerfish_hal PUBLIC ${UHD_LIBRARIES})
-    target_include_directories(archerfish_hal PUBLIC ${UHD_INCLUDE_DIRS})
+    # UHD's CMake config may not create an imported target — create one if missing
+    if(NOT TARGET UHD::uhd)
+        add_library(UHD::uhd UNKNOWN IMPORTED)
+        set_target_properties(UHD::uhd PROPERTIES
+            IMPORTED_LOCATION "${UHD_LIBRARIES}"
+            INTERFACE_INCLUDE_DIRECTORIES "${UHD_INCLUDE_DIRS}"
+        )
+    endif()
+    target_link_libraries(archerfish_hal PUBLIC UHD::uhd)
     target_compile_definitions(archerfish_hal PUBLIC ARCHERFISH_HAS_UHD)
 endif()

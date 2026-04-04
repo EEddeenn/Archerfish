@@ -1,1 +1,2 @@
-# Schema files will be installed here in later increments.
+# Schema files are installed from the top-level CMakeLists.txt
+# (install(DIRECTORY schemas/ ...))

@@ -8,19 +8,35 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(GNUInstallDirs)
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/Modules")
+
+# --- RPATH configuration ---
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+if(APPLE)
+    set(CMAKE_MACOSX_RPATH TRUE)
+    set(CMAKE_INSTALL_NAME_DIR "@rpath")
+    set(CMAKE_INSTALL_RPATH "@executable_path/../${CMAKE_INSTALL_LIBDIR}")
+elseif(UNIX)
+    set(CMAKE_INSTALL_RPATH "$ORIGIN:${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+endif()
+
 include(FetchContent)
+include("${PROJECT_SOURCE_DIR}/cmake/CompilerWarnings.cmake")
 
 enable_testing()
 include(CTest)
 
-# --- Sanitizer options ---
+# --- Sanitizer options (GCC/Clang only) ---
 option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
 option(ENABLE_UBSAN "Enable Undefined Behavior Sanitizer" OFF)
-if(ENABLE_ASAN)
+if(ENABLE_ASAN AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address)
 endif()
-if(ENABLE_UBSAN)
+if(ENABLE_UBSAN AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=undefined)
 endif()
@@ -33,6 +49,7 @@ find_package(CLI11 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Catch2 REQUIRED)
 find_package(SampleRate REQUIRED)
+find_package(Threads REQUIRED)
 
 # json-schema-validator — not in Homebrew, fetch from source
 FetchContent_Declare(
@@ -58,6 +75,15 @@ if(UHD_FOUND)
 else()
     message(STATUS "UHD not found — building without USRP support")
 endif()
+
+# --- Install schemas ---
+install(DIRECTORY schemas/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/archerfish/schemas
+    FILES_MATCHING PATTERN "*.json"
+)
+
+# Define the install datadir so installed binaries can find schemas
+set(ARCHERFISH_INSTALL_DATADIR "${CMAKE_INSTALL_FULL_DATADIR}/archerfish")
 
 # --- Project libraries ---
 add_subdirectory(core)

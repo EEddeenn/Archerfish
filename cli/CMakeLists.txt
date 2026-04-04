@@ -12,7 +12,9 @@ add_library(archerfish_cli STATIC
 )
 
 target_compile_definitions(archerfish_cli
-    PRIVATE CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    PRIVATE
+        CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        ARCHERFISH_INSTALL_DATADIR="${ARCHERFISH_INSTALL_DATADIR}"
 )
 
 target_include_directories(archerfish_cli

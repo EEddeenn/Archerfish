@@ -6,7 +6,20 @@ CLI-first programmable vector signal generator for USRP.
 
 - C++23 compiler (Clang 17+ or GCC 13+)
 - CMake 3.25+
-- Homebrew packages: fmt, spdlog, cli11, catch2, nlohmann-json, libsamplerate
+- pkg-config
+
+**macOS (Homebrew):**
+```bash
+brew install fmt spdlog cli11 catch2 nlohmann-json libsamplerate
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get install -y build-essential cmake pkg-config \
+    libfmt-dev libspdlog-dev nlohmann-json3-dev libcatch2-3-dev \
+    libsamplerate0-dev libcli11-dev
+```
+
 - UHD (optional — enables USRP hardware support)
 
 ## Quick Start
@@ -18,6 +31,9 @@ brew install fmt spdlog cli11 catch2 nlohmann-json libsamplerate
 # Configure and build
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+# Or use CMake Presets:
+# cmake --preset release && cmake --build --preset release
 
 # Run tests
 ctest --test-dir build --output-on-failure
@@ -227,6 +243,7 @@ Overlapping emitters on the same channel can be mixed additively:
 ```
 archerfish/
 ├── cli/                CLI subcommand definitions
+├── cmake/              CMake modules (FindSampleRate, CompilerWarnings)
 ├── core/
 │   ├── common/         Shared types, error handling
 │   ├── dsp/            Waveform generators and DSP blocks
@@ -266,7 +283,7 @@ For multi-emitter scenarios on one channel:
 ## Testing
 
 ```bash
-# Full test suite (60 tests)
+# Full test suite (137 tests)
 ctest --test-dir build --output-on-failure
 
 # Individual test binaries
@@ -279,6 +296,8 @@ ctest --test-dir build --output-on-failure
 ```bash
 cmake --install build --prefix /usr/local
 ```
+
+See [docs/building.md](docs/building.md) for detailed build instructions, CMake presets, sanitizer builds, and troubleshooting.
 
 ## License
 

@@ -15,6 +15,16 @@ using namespace archerfish::common;
 namespace {
 
 std::filesystem::path find_schema_file() {
+    // Try install location first (works after cmake --install)
+    #ifdef ARCHERFISH_INSTALL_DATADIR
+    {
+        auto installed = std::filesystem::path(ARCHERFISH_INSTALL_DATADIR) / "schemas" / "scenario.schema.json";
+        if (std::filesystem::exists(installed)) {
+            return installed;
+        }
+    }
+    #endif
+    // Fall back to source tree (works during development)
     auto src = std::filesystem::path(CMAKE_SOURCE_DIR);
     return src / "schemas" / "scenario.schema.json";
 }

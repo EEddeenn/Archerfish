@@ -1,5 +1,6 @@
 # Build
 build/
+build-*/
 cmake-build-*/
 
 # IDE
@@ -9,12 +10,17 @@ cmake-build-*/
 *.swo
 *~
 
+# clangd / LSP cache
+.cache/
+
 # CMake generated
 .cmake/
-.cache/
 
 # FetchContent cache
 _deps/
+
+# CMake user presets (local overrides)
+CMakeUserPresets.json
 
 # Generated output
 *.cf32
@@ -22,6 +28,13 @@ _deps/
 *.ci8
 runs/
 
+# OS
+.DS_Store
+Thumbs.db
+
 # Python
 .ruff_cache/
 __pycache__/
+
+# Agent tooling
+.sisyphus/

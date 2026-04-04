@@ -20,7 +20,7 @@ jobs:
         run: brew install fmt spdlog cli11 catch2 nlohmann-json libsamplerate
 
       - name: Install UHD (optional)
-        run: brew install uhd || echo "UHD not available, building without USRP support"
+        run: brew install uhd || echo "::warning::UHD not available — building without USRP support"
         continue-on-error: true
 
       - name: Configure
@@ -44,13 +44,28 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake
+          sudo apt-get install -y build-essential cmake pkg-config
 
-      - name: Install dependencies
+      - name: Install required libraries
         run: |
-          sudo apt-get install -y libfmt-dev libspdlog-dev nlohmann-json3-dev libcatch2-3-dev || true
-          sudo apt-get install -y libsamplerate0-dev || true
-          sudo apt-get install -y libuhd-dev || echo "UHD not available, building without USRP support"
+          sudo apt-get install -y \
+            libfmt-dev \
+            libspdlog-dev \
+            nlohmann-json3-dev \
+            libcatch2-3-dev \
+            libsamplerate0-dev \
+            libcli11-dev
+
+      - name: Install UHD (optional)
+        run: sudo apt-get install -y libuhd-dev || echo "::warning::UHD not available — building without USRP support"
+        continue-on-error: true
+
+      - name: Verify dependencies
+        run: |
+          echo "Checking required dependencies..."
+          pkg-config --exists samplerate && echo "  libsamplerate: OK" || echo "  libsamplerate: MISSING"
+          dpkg -s libfmt-dev >/dev/null 2>&1 && echo "  libfmt: OK" || echo "  libfmt: MISSING"
+          dpkg -s libspdlog-dev >/dev/null 2>&1 && echo "  libspdlog: OK" || echo "  libspdlog: MISSING"
 
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}

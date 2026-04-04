@@ -16,7 +16,20 @@ namespace archerfish::cli {
 namespace {
 
 std::string read_schema_json() {
-    std::string schema_path = std::string(CMAKE_SOURCE_DIR) + "/schemas/scenario.schema.json";
+    std::string schema_path;
+    // Try install location first
+    #ifdef ARCHERFISH_INSTALL_DATADIR
+    {
+        std::string installed = std::string(ARCHERFISH_INSTALL_DATADIR) + "/schemas/scenario.schema.json";
+        if (std::ifstream(installed).is_open()) {
+            schema_path = installed;
+        }
+    }
+    #endif
+    // Fall back to source tree
+    if (schema_path.empty()) {
+        schema_path = std::string(CMAKE_SOURCE_DIR) + "/schemas/scenario.schema.json";
+    }
     std::ifstream f(schema_path);
     if (!f.is_open()) {
         throw std::runtime_error(fmt::format("Cannot open schema file: {}", schema_path));

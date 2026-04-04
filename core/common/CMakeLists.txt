@@ -18,9 +18,9 @@ target_link_libraries(archerfish_common
         nlohmann_json::nlohmann_json
 )
 
-target_compile_options(archerfish_common INTERFACE
-    -Wall -Wextra -Wpedantic -Werror
-    -Wimplicit-fallthrough
-    -Wnull-dereference
-    -Woverloaded-virtual
-)
+# Warnings are applied per-target via cmake/CompilerWarnings.cmake
+
+# Apply project warnings (requires cmake/CompilerWarnings.cmake included by parent)
+if(COMMAND enable_project_warnings)
+    enable_project_warnings(archerfish_common)
+endif()

@@ -16,6 +16,7 @@ target_include_directories(archerfish_scheduler
 target_compile_definitions(archerfish_scheduler
     PRIVATE
         CMAKE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        ARCHERFISH_INSTALL_DATADIR="${ARCHERFISH_INSTALL_DATADIR}"
 )
 
 target_link_libraries(archerfish_scheduler
