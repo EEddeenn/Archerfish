@@ -1,5 +1,7 @@
 #include "archerfish/runtime/tx_worker.hpp"
 
+#include <spdlog/spdlog.h>
+
 #include <thread>
 
 namespace archerfish::runtime {
@@ -46,12 +48,13 @@ void TxWorker::run() {
         meta.time_spec_sec = block->time_spec_sec;
 
         auto sz = block->samples.size();
+        size_t actually_sent = 0;
         if (!block->samples.empty()) {
-            device_.send_samples(channel_, block->samples.data(),
+            actually_sent = device_.send_samples(channel_, block->samples.data(),
                                  sz, meta);
         }
 
-        metrics_.samples_sent.fetch_add(sz, std::memory_order_relaxed);
+        metrics_.samples_sent.fetch_add(actually_sent, std::memory_order_relaxed);
         metrics_.blocks_sent.fetch_add(1, std::memory_order_relaxed);
 
         if (block->end_of_burst) {

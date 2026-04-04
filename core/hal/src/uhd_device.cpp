@@ -16,6 +16,9 @@ UhdDevice::UhdDevice(const uhd::device_addr_t& dev_addr)
 
     spdlog::info("Opening USRP device: {}", id_);
     usrp_ = uhd::usrp::multi_usrp::make(dev_addr);
+    if (!usrp_) {
+        throw std::runtime_error(fmt::format("Failed to create USRP device: {}", id_));
+    }
     spdlog::info("USRP device opened: {} ({})", id_, usrp_->get_mboard_name());
 }
 
@@ -28,8 +31,10 @@ std::string UhdDevice::device_id() const {
 }
 
 DeviceCapabilities UhdDevice::get_capabilities() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     DeviceCapabilities caps;
     caps.num_channels = usrp_->get_tx_num_channels();
+    bool all_ok = true;
 
     try {
         auto tx_freq_range = usrp_->get_tx_freq_range(0);
@@ -37,6 +42,7 @@ DeviceCapabilities UhdDevice::get_capabilities() const {
         caps.freq_range.max_val = tx_freq_range.stop();
     } catch (const uhd::exception::runtime_error&) {
         spdlog::warn("Could not query TX freq range, using defaults");
+        all_ok = false;
     }
 
     try {
@@ -45,6 +51,7 @@ DeviceCapabilities UhdDevice::get_capabilities() const {
         caps.rate_range.max_val = clock_rates.stop();
     } catch (const uhd::exception::runtime_error&) {
         spdlog::warn("Could not query master clock rate range, using defaults");
+        all_ok = false;
     }
 
     try {
@@ -53,6 +60,7 @@ DeviceCapabilities UhdDevice::get_capabilities() const {
         caps.gain_range.max_val = tx_gain_range.stop();
     } catch (const uhd::exception::runtime_error&) {
         spdlog::warn("Could not query TX gain range, using defaults");
+        all_ok = false;
     }
 
     try {
@@ -61,20 +69,24 @@ DeviceCapabilities UhdDevice::get_capabilities() const {
         caps.bandwidth_range.max_val = tx_bw_range.stop();
     } catch (const uhd::exception::runtime_error&) {
         spdlog::warn("Could not query TX bandwidth range, using defaults");
+        all_ok = false;
     }
 
     try {
         caps.supported_clock_sources = usrp_->get_clock_sources(0);
     } catch (const uhd::exception::runtime_error&) {
         spdlog::warn("Could not query clock sources");
+        all_ok = false;
     }
 
     try {
         caps.supported_time_sources = usrp_->get_time_sources(0);
     } catch (const uhd::exception::runtime_error&) {
         spdlog::warn("Could not query time sources");
+        all_ok = false;
     }
 
+    caps.caps_valid = all_ok;
     return caps;
 }
 
@@ -168,6 +180,19 @@ void UhdDevice::sync_time_now() {
 
 void UhdDevice::start_tx(uint32_t channel) {
     std::lock_guard<std::mutex> lock(mutex_);
+    auto existing = tx_streamers_.find(channel);
+    if (existing != tx_streamers_.end() && existing->second) {
+        spdlog::warn("CH{} start_tx called while TX already active, stopping existing streamer", channel);
+        try {
+            uhd::tx_metadata_t md;
+            md.end_of_burst = true;
+            std::vector<std::complex<float>> sentinel(1, {0.0f, 0.0f});
+            existing->second->send(sentinel.data(), 1, md);
+        } catch (const std::exception& e) {
+            spdlog::warn("Error sending EOB on CH{} during restart: {}", channel, e.what());
+        }
+        tx_streamers_.erase(existing);
+    }
     uhd::stream_args_t stream_args("fc32");
     stream_args.channels = {channel};
     tx_streamers_[channel] = usrp_->get_tx_stream(stream_args);
@@ -180,17 +205,24 @@ void UhdDevice::stop_tx(uint32_t channel) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = tx_streamers_.find(channel);
     if (it != tx_streamers_.end() && it->second) {
-        uhd::tx_metadata_t md;
-        md.end_of_burst = true;
-        std::vector<std::complex<float>> sentinel(1, {0.0f, 0.0f});
-        it->second->send(sentinel.data(), 1, md);
+        try {
+            uhd::tx_metadata_t md;
+            md.end_of_burst = true;
+            std::vector<std::complex<float>> sentinel(1, {0.0f, 0.0f});
+            it->second->send(sentinel.data(), 1, md);
+        } catch (const std::exception& e) {
+            spdlog::warn("Error sending EOB on CH{} during stop: {}", channel, e.what());
+        }
         tx_streamers_.erase(it);
     }
-    tx_active_[channel] = false;
+    auto active_it = tx_active_.find(channel);
+    if (active_it != tx_active_.end()) {
+        active_it->second = false;
+    }
     spdlog::info("CH{} TX stopped", channel);
 }
 
-void UhdDevice::send_samples(uint32_t channel,
+size_t UhdDevice::send_samples(uint32_t channel,
                               const std::complex<float>* data,
                               size_t count,
                               const TxMetadata& meta) {
@@ -198,11 +230,12 @@ void UhdDevice::send_samples(uint32_t channel,
     auto it = tx_streamers_.find(channel);
     if (it == tx_streamers_.end() || !it->second) {
         spdlog::error("send_samples called without active TX streamer on CH{}", channel);
-        return;
+        return 0;
     }
-    if (!is_tx_active(channel)) {
+    auto active_it = tx_active_.find(channel);
+    if (active_it == tx_active_.end() || !active_it->second) {
         spdlog::warn("send_samples called on CH{} but TX not active", channel);
-        return;
+        return 0;
     }
 
     auto& streamer = it->second;
@@ -210,7 +243,7 @@ void UhdDevice::send_samples(uint32_t channel,
     md.has_time_spec = meta.has_time_spec;
     md.time_spec = uhd::time_spec_t(meta.time_spec_sec);
     md.start_of_burst = meta.start_of_burst;
-    md.end_of_burst = meta.end_of_burst;
+    md.end_of_burst = false;
 
     size_t sent = 0;
     while (sent < count) {
@@ -223,9 +256,19 @@ void UhdDevice::send_samples(uint32_t channel,
         md.start_of_burst = false;
         sent += n;
     }
+
+    if (meta.end_of_burst && sent == count) {
+        uhd::tx_metadata_t eob_md;
+        eob_md.end_of_burst = true;
+        std::vector<std::complex<float>> sentinel(1, {0.0f, 0.0f});
+        streamer->send(sentinel.data(), 1, eob_md);
+    }
+
+    return sent;
 }
 
 bool UhdDevice::is_tx_active(uint32_t channel) const {
+    std::lock_guard<std::mutex> lock(mutex_);
     auto it = tx_active_.find(channel);
     return it != tx_active_.end() && it->second;
 }

@@ -84,9 +84,9 @@ TEST_CASE("StubDevice send_samples per channel", "[hal][multi_channel]") {
     std::vector<std::complex<float>> samples(100, {0.5f, 0.0f});
     TxMetadata meta;
 
-    device.send_samples(0, samples.data(), 100, meta);
-    device.send_samples(0, samples.data(), 50, meta);
-    device.send_samples(1, samples.data(), 200, meta);
+    (void)device.send_samples(0, samples.data(), 100, meta);
+    (void)device.send_samples(0, samples.data(), 50, meta);
+    (void)device.send_samples(1, samples.data(), 200, meta);
 
     REQUIRE(device.total_samples_sent(0) == 150);
     REQUIRE(device.total_samples_sent(1) == 200);
@@ -99,7 +99,7 @@ TEST_CASE("StubDevice send_samples rejects when TX not active on channel", "[hal
     std::vector<std::complex<float>> samples(100, {0.5f, 0.0f});
     TxMetadata meta;
 
-    device.send_samples(0, samples.data(), 100, meta);
+    (void)device.send_samples(0, samples.data(), 100, meta);
     REQUIRE(device.total_samples_sent(0) == 0);
 }
 
@@ -140,8 +140,8 @@ TEST_CASE("StubDevice reset clears per-channel state", "[hal][multi_channel]") {
 
     std::vector<std::complex<float>> samples(100, {0.5f, 0.0f});
     TxMetadata meta;
-    device.send_samples(0, samples.data(), 100, meta);
-    device.send_samples(1, samples.data(), 200, meta);
+    (void)device.send_samples(0, samples.data(), 100, meta);
+    (void)device.send_samples(1, samples.data(), 200, meta);
 
     REQUIRE(device.total_samples_sent(0) == 100);
     REQUIRE(device.total_samples_sent(1) == 200);

@@ -12,7 +12,8 @@ struct Range {
     double max_val{0.0};
 
     [[nodiscard]] bool contains(double val) const {
-        return val >= min_val && val <= max_val;
+        constexpr double eps = 1e-9;  // Tolerance for floating-point rounding
+        return val >= min_val - eps && val <= max_val + eps;
     }
 };
 
@@ -26,6 +27,7 @@ struct DeviceCapabilities {
     std::vector<std::string> supported_clock_sources{"internal"};
     std::vector<std::string> supported_time_sources{"none"};
     bool supports_replay{false};
+    bool caps_valid{true};
 };
 
 } // namespace archerfish::hal

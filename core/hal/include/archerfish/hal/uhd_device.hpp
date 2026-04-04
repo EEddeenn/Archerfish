@@ -36,10 +36,10 @@ public:
     void start_tx(uint32_t channel) override;
     void stop_tx(uint32_t channel) override;
 
-    void send_samples(uint32_t channel,
-                      const std::complex<float>* data,
-                      size_t count,
-                      const TxMetadata& meta) override;
+    [[nodiscard]] size_t send_samples(uint32_t channel,
+                       const std::complex<float>* data,
+                       size_t count,
+                       const TxMetadata& meta) override;
 
     [[nodiscard]] bool is_tx_active(uint32_t channel) const override;
 

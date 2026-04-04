@@ -87,7 +87,7 @@ TEST_CASE("StubDevice send_samples counts samples", "[hal][stub]") {
 
     TxMetadata meta{.time_spec_sec = 1.5, .has_time_spec = true, .start_of_burst = true, .end_of_burst = false};
     dev.start_tx(0);
-    dev.send_samples(0, samples.data(), 100, meta);
+    (void)dev.send_samples(0, samples.data(), 100, meta);
 
     CHECK(dev.total_samples_sent(0) == 100);
 
@@ -106,9 +106,9 @@ TEST_CASE("StubDevice total_samples_sent accumulates", "[hal][stub]") {
     std::vector<std::complex<float>> buf(50, {0.0f, 0.0f});
 
     dev.start_tx(0);
-    dev.send_samples(0, buf.data(), 50, {});
-    dev.send_samples(0, buf.data(), 50, {});
-    dev.send_samples(0, buf.data(), 25, {});
+    (void)dev.send_samples(0, buf.data(), 50, {});
+    (void)dev.send_samples(0, buf.data(), 50, {});
+    (void)dev.send_samples(0, buf.data(), 25, {});
 
     CHECK(dev.total_samples_sent(0) == 125);
 }
@@ -118,7 +118,7 @@ TEST_CASE("StubDevice reset clears history", "[hal][stub]") {
     dev.start_tx(0);
     dev.set_center_freq(0, 1e9);
     std::vector<std::complex<float>> buf(10);
-    dev.send_samples(0, buf.data(), 10, {});
+    (void)dev.send_samples(0, buf.data(), 10, {});
 
     CHECK_FALSE(dev.call_history().empty());
     CHECK(dev.total_samples_sent(0) == 10);
@@ -140,8 +140,8 @@ TEST_CASE("StubDevice multi-channel isolation", "[hal][stub]") {
     CHECK(dev.is_tx_active(1));
 
     std::vector<std::complex<float>> buf(10);
-    dev.send_samples(0, buf.data(), 10, {});
-    dev.send_samples(1, buf.data(), 20, {});
+    (void)dev.send_samples(0, buf.data(), 10, {});
+    (void)dev.send_samples(1, buf.data(), 20, {});
 
     CHECK(dev.total_samples_sent(0) == 10);
     CHECK(dev.total_samples_sent(1) == 20);

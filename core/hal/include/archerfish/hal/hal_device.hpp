@@ -48,10 +48,10 @@ public:
 
     // --- Streaming ---------------------------------------------------------
 
-    virtual void send_samples(uint32_t channel,
-                              const std::complex<float>* data,
-                              size_t count,
-                              const TxMetadata& meta) = 0;
+    [[nodiscard]] virtual size_t send_samples(uint32_t channel,
+                               const std::complex<float>* data,
+                               size_t count,
+                               const TxMetadata& meta) = 0;
 
     // --- Status ------------------------------------------------------------
 

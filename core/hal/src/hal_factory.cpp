@@ -6,6 +6,7 @@
 #endif
 
 #include <spdlog/spdlog.h>
+#include <fmt/format.h>
 
 #include <mutex>
 #include <stdexcept>
@@ -76,13 +77,15 @@ std::unique_ptr<IHalDevice> open_device(const std::string& device_id) {
                 return std::make_unique<UhdDevice>(info.addr);
             }
         }
-    }
-    for (auto& addr : UhdDevice::enumerate_uhd_devices()) {
-        std::string serial = addr.has_key("serial") ? addr["serial"] : "unknown";
-        std::string product = addr.has_key("product") ? addr["product"] : "usrp";
-        std::string id = fmt::format("usrp-{}-{}", product, serial);
-        if (id == device_id) {
-            return std::make_unique<UhdDevice>(addr);
+        auto found = UhdDevice::enumerate_uhd_devices();
+        for (auto& addr : found) {
+            std::string serial = addr.has_key("serial") ? addr["serial"] : "unknown";
+            std::string product = addr.has_key("product") ? addr["product"] : "usrp";
+            std::string id = fmt::format("usrp-{}-{}", product, serial);
+            cached_uhd_devices().push_back({addr, id});
+            if (id == device_id) {
+                return std::make_unique<UhdDevice>(addr);
+            }
         }
     }
 #endif

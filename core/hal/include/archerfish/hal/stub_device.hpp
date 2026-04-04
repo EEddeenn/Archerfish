@@ -39,7 +39,7 @@ public:
     void start_tx(uint32_t channel) override;
     void stop_tx(uint32_t channel) override;
 
-    void send_samples(uint32_t channel,
+    [[nodiscard]] size_t send_samples(uint32_t channel,
                       const std::complex<float>* data,
                       size_t count,
                       const TxMetadata& meta) override;
@@ -64,6 +64,7 @@ private:
     std::unordered_map<uint32_t, double> gain_;
     std::unordered_map<uint32_t, double> bw_;
     std::unordered_map<uint32_t, size_t> samples_sent_;
+    std::unordered_map<uint32_t, std::string> antenna_;
 };
 
 } // namespace archerfish::hal

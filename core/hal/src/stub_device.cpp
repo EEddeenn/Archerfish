@@ -34,6 +34,7 @@ void StubDevice::set_gain(uint32_t channel, double db) {
 }
 
 void StubDevice::set_antenna(uint32_t channel, std::string_view port) {
+    antenna_[channel] = std::string(port);
     record_str("set_antenna", channel, port);
 }
 
@@ -59,15 +60,16 @@ void StubDevice::stop_tx(uint32_t channel) {
     record("stop_tx", channel);
 }
 
-void StubDevice::send_samples(uint32_t channel,
+size_t StubDevice::send_samples(uint32_t channel,
                               const std::complex<float>* /*data*/,
                               size_t count,
                               const TxMetadata& meta) {
     if (!is_tx_active(channel)) {
-        return;
+        return 0;
     }
     samples_sent_[channel] += count;
     record_samples(channel, count, meta);
+    return count;
 }
 
 bool StubDevice::is_tx_active(uint32_t channel) const {
@@ -92,6 +94,7 @@ void StubDevice::reset() {
     gain_.clear();
     bw_.clear();
     samples_sent_.clear();
+    antenna_.clear();
 }
 
 void StubDevice::record(std::string method, uint32_t ch, double val) {
