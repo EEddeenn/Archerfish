@@ -44,6 +44,7 @@ struct WaveformDef {
     std::optional<std::string> id;
     dsp::WaveformType type{dsp::WaveformType::Unknown};
     nlohmann::json params;
+    std::optional<double> target_power_dbm{};
 };
 
 struct ImpairmentSettings {
@@ -58,6 +59,19 @@ struct ImpairmentSettings {
     std::optional<double> amplitude_ripple_freq_hz;
     std::optional<double> delay_sec;
     std::optional<double> burst_dropout_rate;
+    std::optional<double> burst_dropout_mean_burst_sec;
+    std::optional<double> phase_noise_bandwidth_hz;
+    std::optional<double> phase_noise_magnitude_rad;
+    std::optional<std::string> phase_noise_psd_shape;
+    std::optional<double> multipath_delay_samples;
+    std::optional<double> multipath_amplitude;
+    std::optional<double> fading_doppler_hz;
+    std::optional<std::string> fading_type;
+    std::optional<double> fading_k_factor;
+    std::optional<std::string> pa_model;
+    std::optional<double> pa_saturation;
+    std::optional<double> pa_smoothness;
+    std::optional<double> pa_phase_shift;
 };
 
 enum class MixingMode {
@@ -68,6 +82,19 @@ enum class MixingMode {
 struct RepeatSpec {
     int count{1};
     double interval_sec{0.0};
+};
+
+struct ChannelDef {
+    std::string id;
+    std::string device;
+    uint32_t index{0};
+    RfSettings rf;
+};
+
+struct SyncGroup {
+    std::string id;
+    std::vector<std::string> channels;
+    std::string mode; // "coherent" | "independent"
 };
 
 struct EmitterDef {
@@ -81,18 +108,28 @@ struct EmitterDef {
     std::optional<ImpairmentSettings> impairments;
     MixingMode mixing{MixingMode::None};
     std::optional<RepeatSpec> repeat;
+    std::optional<std::string> channel_id;
 };
 
 struct ScenarioEvent {
     std::string target_device;
     double time_sec{0.0};
-    std::string type;  // "retune", "gain_change", "marker", "burst"
+    std::string type;  // "retune", "gain_change", "marker", "burst", "waveform_switch", "impairment_change"
     nlohmann::json payload;
+};
+
+enum class RunMode {
+    Realtime,
+    Replay
 };
 
 struct ReportingConfig {
     bool save_plan{false};
     bool save_metrics{false};
+};
+
+struct RunConfig {
+    RunMode mode{RunMode::Realtime};
 };
 
 struct Scenario {
@@ -102,6 +139,9 @@ struct Scenario {
     std::vector<EmitterDef> emitters;
     std::vector<ScenarioEvent> events;
     ReportingConfig reporting;
+    std::vector<ChannelDef> channel_defs;
+    std::vector<SyncGroup> sync_groups;
+    RunConfig run;
 };
 
 } // namespace archerfish::scenario

@@ -23,7 +23,9 @@ enum class TimelineEventType {
     EmitterStop,
     GainChange,
     FreqChange,
-    Marker
+    Marker,
+    WaveformSwitch,
+    ImpairmentChange
 };
 
 struct TimelineEvent {
@@ -60,6 +62,15 @@ struct ResourceEstimate {
     std::vector<std::string> warnings;
 };
 
+struct ChannelPlan {
+    std::string channel_id;
+    uint32_t channel_index{0};
+    RfSettings rf;
+    std::vector<RenderInstruction> render_instructions;
+    std::vector<TimelineEvent> events;
+    ResourceEstimate resource_estimate;
+};
+
 struct Plan {
     Scenario normalized_scenario;
     std::vector<ChannelBinding> channels;
@@ -69,6 +80,8 @@ struct Plan {
     ResourceEstimate resource_estimate;
     common::ErrorList warnings;
     double estimated_duration_sec{0.0};
+    std::vector<ChannelPlan> channel_plans;
+    RunMode run_mode{RunMode::Realtime};
 };
 
 } // namespace archerfish::scenario

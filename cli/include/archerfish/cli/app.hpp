@@ -13,7 +13,10 @@ enum class ExitCode : int {
     InputValidationFailure = 2,
     PlanningFailure = 3,
     PreparationFailure = 4,
-    ExecutionFailure = 5
+    ExecutionFailure = 5,
+    Underrun = 6,
+    DeviceDisconnect = 7,
+    TimeoutCancellation = 8
 };
 
 struct CliOptions {
@@ -21,6 +24,7 @@ struct CliOptions {
     bool verbose{false};
     bool quiet{false};
     std::string device_id;
+    int last_exit_code{0};
 };
 
 /// Build the CLI11 application with all subcommands.

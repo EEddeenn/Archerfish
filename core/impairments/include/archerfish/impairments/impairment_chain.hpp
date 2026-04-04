@@ -6,6 +6,10 @@
 
 #include "archerfish/impairments/impairment.hpp"
 
+namespace archerfish::scenario {
+struct ImpairmentSettings;
+} // namespace archerfish::scenario
+
 namespace archerfish::impairments {
 
 class ImpairmentChain {
@@ -20,5 +24,11 @@ public:
 private:
     std::vector<std::unique_ptr<IImpairment>> chain_;
 };
+
+/// Factory: build an impairment chain from scenario settings.
+/// Returns nullptr when no impairments are configured.
+[[nodiscard]] std::unique_ptr<ImpairmentChain> build_chain(
+    const scenario::ImpairmentSettings& settings,
+    double sample_rate);
 
 } // namespace archerfish::impairments

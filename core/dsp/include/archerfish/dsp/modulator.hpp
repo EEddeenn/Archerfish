@@ -7,11 +7,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include "archerfish/dsp/modulation_type.hpp"
 #include "archerfish/dsp/source_base.hpp"
 
 namespace archerfish::dsp {
-
-enum class ModulationType { BPSK, QPSK, PSK8, QAM16, QAM64, APSK16, APSK32 };
 
 class ModulatorSource : public SourceBase {
 public:
@@ -32,14 +31,12 @@ private:
     std::mt19937 rng_;
     std::vector<std::complex<float>> constellation_;
     std::vector<float> rrc_taps_;
-    std::vector<std::complex<float>> symbol_buffer_;
     std::vector<std::complex<float>> shaped_buffer_;
     std::vector<std::complex<float>> filter_tail_;
     size_t output_offset_{0};
     double peak_to_rms_ratio_{std::sqrt(2.0)};
     double rms_ratio_{1.0 / std::sqrt(2.0)};
 
-    void build_constellation();
     void build_rrc_taps();
     std::complex<float> map_symbol(uint32_t bits);
     uint32_t random_bits();

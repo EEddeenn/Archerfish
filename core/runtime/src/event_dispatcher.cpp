@@ -44,6 +44,14 @@ const std::vector<MarkerDispatch>& EventDispatcher::marker_dispatches() const {
     return marker_dispatches_;
 }
 
+const std::vector<WaveformSwitchDispatch>& EventDispatcher::waveform_switch_dispatches() const {
+    return waveform_switch_dispatches_;
+}
+
+const std::vector<ImpairmentChangeDispatch>& EventDispatcher::impairment_change_dispatches() const {
+    return impairment_change_dispatches_;
+}
+
 void EventDispatcher::run() {
     for (auto& event : events_) {
         if (cancelled_.load(std::memory_order_acquire)) {

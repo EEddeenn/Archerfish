@@ -11,6 +11,13 @@
 
 namespace archerfish::dsp {
 
+enum class FileFormat {
+    CF32,
+    CI16
+};
+
+[[nodiscard]] FileFormat detect_file_format(const std::string& path);
+
 class FileSource : public SourceBase {
 public:
     void configure(const nlohmann::json& params) override;
@@ -27,5 +34,7 @@ private:
     size_t read_offset_{0};
     bool eof_{false};
 };
+
+void write_ci16(const std::string& path, const std::vector<std::complex<float>>& samples);
 
 } // namespace archerfish::dsp

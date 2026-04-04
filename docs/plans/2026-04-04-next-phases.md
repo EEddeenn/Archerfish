@@ -743,8 +743,7 @@ Future phase — depends on real-world usage patterns.
 - Multipath tap model
 - PA nonlinearity models
 - Fading approximations
-- Remote API (gRPC or REST)
-- Optional UI layer
+- richer impairments
 
 ### Key Decisions Needed
 - gRPC embedded vs service wrapper

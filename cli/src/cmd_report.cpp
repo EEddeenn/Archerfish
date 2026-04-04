@@ -14,6 +14,46 @@ namespace archerfish::cli {
 
 namespace {
 
+void flatten_json(const nlohmann::json& j,
+                  const std::string& prefix,
+                  std::vector<std::pair<std::string, std::string>>& rows) {
+    for (auto& [key, value] : j.items()) {
+        std::string full_key = prefix.empty() ? key : prefix + "." + key;
+        if (value.is_object()) {
+            flatten_json(value, full_key, rows);
+        } else if (value.is_array()) {
+            for (size_t i = 0; i < value.size(); ++i) {
+                std::string idx_key = full_key + "." + std::to_string(i);
+                if (value[i].is_object()) {
+                    flatten_json(value[i], idx_key, rows);
+                } else if (value[i].is_string()) {
+                    rows.emplace_back(idx_key, value[i].get<std::string>());
+                } else {
+                    rows.emplace_back(idx_key, value[i].dump());
+                }
+            }
+        } else if (value.is_string()) {
+            rows.emplace_back(full_key, value.get<std::string>());
+        } else {
+            rows.emplace_back(full_key, value.dump());
+        }
+    }
+}
+
+static std::string csv_escape(const std::string& s) {
+    if (s.find(',') != std::string::npos || s.find('"') != std::string::npos || s.find('\n') != std::string::npos) {
+        std::string escaped;
+        escaped += '"';
+        for (char c : s) {
+            if (c == '"') escaped += '"';
+            escaped += c;
+        }
+        escaped += '"';
+        return escaped;
+    }
+    return s;
+}
+
 std::expected<nlohmann::json, std::string> load_report_json(const std::string& run_id) {
     namespace fs = std::filesystem;
 
@@ -176,6 +216,110 @@ int cmd_metrics_export(const CliOptions& opts, const std::string& run_id, const 
     }
 
     fmt::print("Metrics exported to {}\n", output_path);
+    return 0;
+}
+
+int cmd_metrics_export_latest(const CliOptions& opts, const std::string& output_path) {
+    namespace fs = std::filesystem;
+
+    fs::path runs_dir = fs::current_path() / "runs";
+    if (!fs::exists(runs_dir)) {
+        fmt::print(stderr, "Error: No runs directory found\n");
+        return static_cast<int>(ExitCode::GenericFailure);
+    }
+
+    std::string latest_dir;
+    std::filesystem::file_time_type latest_time{};
+    bool found = false;
+
+    for (const auto& entry : fs::directory_iterator(runs_dir)) {
+        if (!entry.is_directory()) continue;
+        if (!found || entry.last_write_time() > latest_time) {
+            latest_time = entry.last_write_time();
+            latest_dir = entry.path().filename().string();
+            found = true;
+        }
+    }
+
+    if (!found) {
+        fmt::print(stderr, "Error: No runs found\n");
+        return static_cast<int>(ExitCode::GenericFailure);
+    }
+
+    return cmd_metrics_export(opts, latest_dir, output_path);
+}
+
+int cmd_metrics_export_latest_ex(const CliOptions& opts,
+                                 const std::string& output_path,
+                                 const std::string& format) {
+    (void)opts;
+    namespace fs = std::filesystem;
+
+    fs::path runs_dir = fs::current_path() / "runs";
+    if (!fs::exists(runs_dir)) {
+        fmt::print(stderr, "Error: No runs directory found\n");
+        return static_cast<int>(ExitCode::GenericFailure);
+    }
+
+    std::string latest_dir;
+    fs::file_time_type latest_time{};
+    bool found = false;
+
+    for (const auto& entry : fs::directory_iterator(runs_dir)) {
+        if (!entry.is_directory()) continue;
+        if (!found || entry.last_write_time() > latest_time) {
+            latest_time = entry.last_write_time();
+            latest_dir = entry.path().filename().string();
+            found = true;
+        }
+    }
+
+    if (!found) {
+        fmt::print(stderr, "Error: No runs found\n");
+        return static_cast<int>(ExitCode::GenericFailure);
+    }
+
+    fs::path metrics_file = runs_dir / latest_dir / "metrics.json";
+    if (!fs::exists(metrics_file)) {
+        fmt::print(stderr, "Error: metrics.json not found in run '{}'\n", latest_dir);
+        return static_cast<int>(ExitCode::GenericFailure);
+    }
+
+    std::ifstream f(metrics_file);
+    if (!f.is_open()) {
+        fmt::print(stderr, "Error: Cannot open {}\n", metrics_file.string());
+        return static_cast<int>(ExitCode::GenericFailure);
+    }
+
+    nlohmann::json metrics_json;
+    f >> metrics_json;
+
+    std::string output;
+    if (format == "csv") {
+        std::vector<std::pair<std::string, std::string>> rows;
+        flatten_json(metrics_json, "", rows);
+
+        output = "key,value\n";
+        for (const auto& [k, v] : rows) {
+            output += csv_escape(k) + "," + csv_escape(v) + "\n";
+        }
+    } else {
+        output = metrics_json.dump(2) + "\n";
+    }
+
+    if (output_path.empty()) {
+        fmt::print("{}", output);
+    } else {
+        std::ofstream out(output_path);
+        if (!out.is_open()) {
+            fmt::print(stderr, "Error: Cannot open '{}' for writing\n", output_path);
+            return static_cast<int>(ExitCode::GenericFailure);
+        }
+        out << output;
+        out.close();
+        fmt::print("Metrics exported to {}\n", output_path);
+    }
+
     return 0;
 }
 

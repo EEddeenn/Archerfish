@@ -43,6 +43,14 @@ FetchContent_Declare(
 set(JSON_SCHEMA_VALIDATOR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(json_schema_validator)
 
+# yaml-cpp — YAML scenario support (disabled: network fetch issue)
+# FetchContent_Declare(
+#     yaml_cpp
+#     URL https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.8.0.tar.gz
+# )
+# set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+# FetchContent_MakeAvailable(yaml_cpp)
+
 # Optional: UHD (system-installed)
 find_package(UHD QUIET)
 if(UHD_FOUND)

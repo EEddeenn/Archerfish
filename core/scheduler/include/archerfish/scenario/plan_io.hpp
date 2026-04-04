@@ -27,6 +27,12 @@ namespace archerfish::scenario {
 [[nodiscard]] nlohmann::json reporting_config_to_json(const ReportingConfig& r);
 [[nodiscard]] ReportingConfig reporting_config_from_json(const nlohmann::json& j);
 
+[[nodiscard]] nlohmann::json channel_def_to_json(const ChannelDef& c);
+[[nodiscard]] std::expected<ChannelDef, common::ErrorList> channel_def_from_json(const nlohmann::json& j);
+
+[[nodiscard]] nlohmann::json sync_group_to_json(const SyncGroup& sg);
+[[nodiscard]] std::expected<SyncGroup, common::ErrorList> sync_group_from_json(const nlohmann::json& j);
+
 [[nodiscard]] nlohmann::json scenario_to_json(const Scenario& s);
 [[nodiscard]] std::expected<Scenario, common::ErrorList> scenario_from_json(const nlohmann::json& j);
 

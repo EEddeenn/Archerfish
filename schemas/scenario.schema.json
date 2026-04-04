@@ -70,7 +70,7 @@
           "type": {
             "type": "string",
             "description": "Event type",
-            "enum": ["retune", "gain_change", "marker", "burst"]
+            "enum": ["retune", "gain_change", "marker", "burst", "waveform_switch", "impairment_change"]
           },
           "payload": {
             "type": "object",
@@ -93,6 +93,48 @@
           "type": "boolean",
           "description": "Whether to save execution metrics",
           "default": false
+        }
+      }
+    },
+    "channels": {
+      "type": "array",
+      "description": "Explicit channel definitions",
+      "items": {
+        "type": "object",
+        "required": ["id", "device", "index", "rf"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "description": "Unique channel identifier" },
+          "device": { "type": "string", "minLength": 1, "description": "Reference to device ID" },
+          "index": { "type": "integer", "minimum": 0, "description": "Hardware channel index" },
+          "rf": { "$ref": "#/$defs/rf_settings" }
+        }
+      }
+    },
+    "sync_groups": {
+      "type": "array",
+      "description": "Synchronization group declarations",
+      "items": {
+        "type": "object",
+        "required": ["id", "channels", "mode"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "description": "Sync group identifier" },
+          "channels": { "type": "array", "items": { "type": "string" }, "description": "Channel IDs in this group" },
+          "mode": { "type": "string", "enum": ["coherent", "independent"], "description": "Synchronization mode" }
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "description": "Run configuration",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "description": "Execution mode",
+          "enum": ["realtime", "replay"],
+          "default": "realtime"
         }
       }
     }
@@ -221,9 +263,9 @@
           "type": "number",
           "description": "Additive white Gaussian noise power"
         },
-        "amplitude_ripple_depth": {
+        "amplitude_ripple_db": {
           "type": "number",
-          "description": "Amplitude ripple depth"
+          "description": "Amplitude ripple depth in dB"
         },
         "amplitude_ripple_freq_hz": {
           "type": "number",
@@ -236,14 +278,71 @@
         },
         "burst_dropout_rate": {
           "type": "number",
-          "description": "Burst dropout probability",
-          "minimum": 0,
-          "maximum": 1
+          "description": "Dropout probability"
         },
         "burst_dropout_mean_burst_sec": {
           "type": "number",
-          "description": "Mean burst dropout duration in seconds",
+          "description": "Mean burst length in seconds for burst dropout impairment"
+        },
+        "phase_noise_bandwidth_hz": {
+          "type": "number",
+          "description": "Phase noise bandwidth in Hz",
           "exclusiveMinimum": 0
+        },
+        "phase_noise_magnitude_rad": {
+          "type": "number",
+          "description": "Phase noise magnitude in radians",
+          "minimum": 0
+        },
+        "phase_noise_psd_shape": {
+          "type": "string",
+          "description": "Phase noise PSD shape",
+          "enum": ["white", "flicker", "brownian"]
+        },
+        "multipath_delay_samples": {
+          "type": "number",
+          "description": "Multipath delay in samples",
+          "minimum": 0
+        },
+        "multipath_amplitude": {
+          "type": "number",
+          "description": "Multipath echo relative amplitude",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fading_doppler_hz": {
+          "type": "number",
+          "description": "Fading Doppler shift in Hz",
+          "exclusiveMinimum": 0
+        },
+        "fading_type": {
+          "type": "string",
+          "description": "Fading model type",
+          "enum": ["rayleigh", "rician"]
+        },
+        "fading_k_factor": {
+          "type": "number",
+          "description": "Rician K-factor (linear scale)",
+          "minimum": 0
+        },
+        "pa_model": {
+          "type": "string",
+          "description": "Power amplifier nonlinearity model",
+          "enum": ["rapp", "saleh"]
+        },
+        "pa_saturation": {
+          "type": "number",
+          "description": "PA saturation point (linear amplitude)",
+          "exclusiveMinimum": 0
+        },
+        "pa_smoothness": {
+          "type": "number",
+          "description": "PA smoothness parameter (Rapp p)",
+          "exclusiveMinimum": 0
+        },
+        "pa_phase_shift": {
+          "type": "number",
+          "description": "PA phase shift in radians (Saleh model)"
         }
       }
     },
@@ -313,6 +412,10 @@
               "exclusiveMinimum": 0
             }
           }
+        },
+        "channel_id": {
+          "type": "string",
+          "description": "Reference to explicit channel definition by ID"
         }
       }
     }

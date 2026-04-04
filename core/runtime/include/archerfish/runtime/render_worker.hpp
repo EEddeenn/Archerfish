@@ -37,6 +37,10 @@ public:
     [[nodiscard]] bool is_complete() const;
     [[nodiscard]] size_t samples_rendered() const;
 
+    /// Pre-render entire waveform into a buffer (for replay mode).
+    /// Returns the rendered samples vector.
+    [[nodiscard]] static std::vector<std::complex<float>> pre_render(const RenderJob& job);
+
 private:
     void run();
     std::unique_ptr<dsp::ISource> create_source(dsp::WaveformType type);

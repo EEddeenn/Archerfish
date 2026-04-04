@@ -1,6 +1,8 @@
 add_library(archerfish_common STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/error.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/rf_types.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/regulatory.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/safety_profile.cpp
 )
 
 target_include_directories(archerfish_common

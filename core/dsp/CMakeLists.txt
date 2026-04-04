@@ -4,6 +4,7 @@ add_library(archerfish_dsp STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/chirp_source.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/noise_source.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modulator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/constellation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pulse_shaper.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/multi_tone_source.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/file_source.cpp

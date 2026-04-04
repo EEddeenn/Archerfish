@@ -1,0 +1,17 @@
+{
+    "metadata": { "name": "multi_channel_test" },
+    "devices": [
+        { "id": "usrp0", "rf": { "freq_hz": 2450000000.0, "rate_sps": 10000000.0, "gain_db": 20.0 } }
+    ],
+    "channels": [
+        { "id": "ch0", "device": "usrp0", "index": 0, "rf": { "freq_hz": 915000000.0, "rate_sps": 10000000.0, "gain_db": 20.0 } },
+        { "id": "ch1", "device": "usrp0", "index": 1, "rf": { "freq_hz": 2450000000.0, "rate_sps": 10000000.0, "gain_db": 15.0 } }
+    ],
+    "sync_groups": [
+        { "id": "pair", "channels": ["ch0", "ch1"], "mode": "coherent" }
+    ],
+    "emitters": [
+        { "id": "cw0", "channel_id": "ch0", "device": "usrp0", "start_after_sec": 0.0, "duration_sec": 1.0, "waveform": { "type": "cw", "amplitude": 0.2 } },
+        { "id": "cw1", "channel_id": "ch1", "device": "usrp0", "start_after_sec": 0.0, "duration_sec": 1.0, "waveform": { "type": "cw", "amplitude": 0.3 } }
+    ]
+}

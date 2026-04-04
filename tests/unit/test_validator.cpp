@@ -15,7 +15,7 @@ static Scenario make_valid_scenario() {
     s.devices.push_back({"usrp0", 0, {2450000000.0, 10000000.0, 20.0}});
     s.emitters.push_back({"cw1", "usrp0", 0, 1.0, 4.0,
                           WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.2}}},
-                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt, std::nullopt});
     return s;
 }
 
@@ -116,7 +116,7 @@ TEST_CASE("Overlapping emitters on same channel produces error", "[validator]") 
     auto s = make_valid_scenario();
     s.emitters.push_back({"cw2", "usrp0", 0, 2.0, 3.0,
                           WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.3}}},
-                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt, std::nullopt});
     auto result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V002_OVERLAPPING_EMITTERS"));
@@ -128,7 +128,7 @@ TEST_CASE("Non-overlapping emitters on same channel is OK", "[validator]") {
     s.emitters[0].duration_sec = 2.0;
     s.emitters.push_back({"cw2", "usrp0", 0, 2.0, 2.0,
                           WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.3}}},
-                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt, std::nullopt});
     auto result = validate(s);
     CHECK(result.ok());
 }
@@ -138,7 +138,7 @@ TEST_CASE("Emitters on different channels don't conflict", "[validator]") {
     s.devices[0].channel = std::nullopt;
     s.emitters.push_back({"cw2", "usrp0", 1, 1.0, 4.0,
                           WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.3}}},
-                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt, std::nullopt});
     auto result = validate(s);
     CHECK(result.ok());
 }
@@ -200,7 +200,7 @@ TEST_CASE("Duplicate emitter IDs produces error", "[validator]") {
     auto s = make_valid_scenario();
     s.emitters.push_back({"cw1", "usrp0", 0, 10.0, 2.0,
                           WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.3}}},
-                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt});
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt, std::nullopt});
     auto result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V011_DUPLICATE_EMITTER_ID"));

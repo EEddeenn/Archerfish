@@ -36,3 +36,7 @@ target_link_libraries(test_qpsk_impairments
         Catch2::Catch2WithMain
 )
 add_test(NAME integration_qpsk_impairments COMMAND test_qpsk_impairments)
+
+# --- Multi-Channel Integration Tests (6.4) ---
+
+add_e2e_test(test_multi_channel_run test_multi_channel_run.cpp)

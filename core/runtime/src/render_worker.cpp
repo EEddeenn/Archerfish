@@ -9,14 +9,6 @@
 #include "archerfish/dsp/waveform_type.hpp"
 
 #include "archerfish/impairments/impairment_chain.hpp"
-#include "archerfish/impairments/cfo.hpp"
-#include "archerfish/impairments/awgn.hpp"
-#include "archerfish/impairments/phase_offset.hpp"
-#include "archerfish/impairments/dc_offset.hpp"
-#include "archerfish/impairments/iq_imbalance.hpp"
-#include "archerfish/impairments/amplitude_ripple.hpp"
-#include "archerfish/impairments/delay.hpp"
-#include "archerfish/impairments/burst_dropout.hpp"
 
 namespace archerfish::runtime {
 
@@ -73,32 +65,9 @@ void RenderWorker::run() {
     source->configure(config);
     source->prepare();
 
-    // Build impairment chain once per job
-    std::optional<impairments::ImpairmentChain> chain;
+    std::unique_ptr<impairments::ImpairmentChain> chain;
     if (job_.impairments.has_value()) {
-        auto& imp = *job_.impairments;
-        impairments::ImpairmentChain c;
-        if (imp.cfo_hz.has_value())
-            c.add(std::make_unique<impairments::CfoImpairment>(*imp.cfo_hz, job_.sample_rate));
-        if (imp.awgn_power.has_value())
-            c.add(std::make_unique<impairments::AwgnImpairment>(*imp.awgn_power));
-        if (imp.phase_offset_rad.has_value())
-            c.add(std::make_unique<impairments::PhaseOffsetImpairment>(*imp.phase_offset_rad));
-        if (imp.dc_offset_i.has_value() || imp.dc_offset_q.has_value())
-            c.add(std::make_unique<impairments::DcOffsetImpairment>(
-                imp.dc_offset_i.value_or(0.0), imp.dc_offset_q.value_or(0.0)));
-        if (imp.iq_gain_imbalance_db.has_value() || imp.iq_phase_imbalance_rad.has_value())
-            c.add(std::make_unique<impairments::IqImbalanceImpairment>(
-                imp.iq_gain_imbalance_db.value_or(0.0), imp.iq_phase_imbalance_rad.value_or(0.0)));
-        if (imp.amplitude_ripple_db.has_value())
-            c.add(std::make_unique<impairments::AmplitudeRippleImpairment>(
-                *imp.amplitude_ripple_db, imp.amplitude_ripple_freq_hz.value_or(1000.0), job_.sample_rate));
-        if (imp.delay_sec.has_value())
-            c.add(std::make_unique<impairments::DelayImpairment>(*imp.delay_sec, job_.sample_rate));
-        if (imp.burst_dropout_rate.has_value())
-            c.add(std::make_unique<impairments::BurstDropoutImpairment>(*imp.burst_dropout_rate));
-        if (c.size() > 0)
-            chain.emplace(std::move(c));
+        chain = impairments::build_chain(*job_.impairments, job_.sample_rate);
     }
 
     size_t total_target = static_cast<size_t>(job_.sample_rate * job_.duration_sec);
@@ -116,7 +85,7 @@ void RenderWorker::run() {
         size_t produced = source->render_block(block.samples.data(), to_render);
         if (produced == 0) break;
 
-        if (chain.has_value()) {
+        if (chain) {
             chain->apply(block.samples.data(), produced);
         }
 
@@ -149,6 +118,54 @@ void RenderWorker::run() {
 
 std::unique_ptr<dsp::ISource> RenderWorker::create_source(dsp::WaveformType type) {
     return dsp::create_source(type);
+}
+
+std::vector<std::complex<float>> RenderWorker::pre_render(const RenderJob& job) {
+    std::string type_str = job.waveform_config.value("type", "");
+    auto type_result = dsp::waveform_type_from_string(type_str);
+    if (!type_result.has_value()) return {};
+
+    auto source = dsp::create_source(*type_result);
+    if (!source) return {};
+
+    auto config = job.waveform_config;
+    config["sample_rate"] = job.sample_rate;
+    if (job.duration_sec > 0.0) {
+        config["duration_sec"] = job.duration_sec;
+    }
+
+    source->configure(config);
+    source->prepare();
+
+    std::unique_ptr<impairments::ImpairmentChain> chain;
+    if (job.impairments.has_value()) {
+        chain = impairments::build_chain(*job.impairments, job.sample_rate);
+    }
+
+    size_t total_target = static_cast<size_t>(job.sample_rate * job.duration_sec);
+    std::vector<std::complex<float>> buffer;
+    buffer.reserve(total_target);
+
+    size_t rendered = 0;
+    while (rendered < total_target) {
+        size_t remaining = total_target - rendered;
+        size_t to_render = std::min(remaining, job.block_size);
+        std::vector<std::complex<float>> block(to_render);
+
+        size_t produced = source->render_block(block.data(), to_render);
+        if (produced == 0) break;
+
+        if (chain) {
+            chain->apply(block.data(), produced);
+        }
+
+        for (size_t i = 0; i < produced; ++i) {
+            buffer.push_back(block[i]);
+        }
+        rendered += produced;
+    }
+
+    return buffer;
 }
 
 } // namespace archerfish::runtime

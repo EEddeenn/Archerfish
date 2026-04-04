@@ -240,6 +240,10 @@ void build_mix_groups(Plan& result, const Scenario& scenario) {
             te.type = TimelineEventType::GainChange;
         } else if (evt.type == "marker") {
             te.type = TimelineEventType::Marker;
+        } else if (evt.type == "waveform_switch") {
+            te.type = TimelineEventType::WaveformSwitch;
+        } else if (evt.type == "impairment_change") {
+            te.type = TimelineEventType::ImpairmentChange;
         } else {
             continue;
         }
@@ -349,6 +353,126 @@ void build_mix_groups(Plan& result, const Scenario& scenario) {
 
     build_mix_groups(result, scenario);
     compute_resource_estimates(result, scenario, device_map);
+
+    {
+        std::vector<ChannelDef> effective_channels = scenario.channel_defs;
+        if (effective_channels.empty()) {
+            for (const auto& dev : scenario.devices) {
+                ChannelDef cd;
+                cd.id = dev.id + "_ch" + std::to_string(dev.channel.value_or(0));
+                cd.device = dev.id;
+                cd.index = dev.channel.value_or(0);
+                cd.rf = dev.rf;
+                effective_channels.push_back(std::move(cd));
+            }
+        }
+
+        std::unordered_map<std::string, std::string> emitter_to_channel;
+        for (const auto& emitter : scenario.emitters) {
+            std::string ch_id;
+            if (emitter.channel_id.has_value()) {
+                ch_id = *emitter.channel_id;
+            } else {
+                for (const auto& cd : effective_channels) {
+                    if (cd.device == emitter.device && cd.index == emitter.channel) {
+                        ch_id = cd.id;
+                        break;
+                    }
+                }
+            }
+
+            int repeat_count = 1;
+            if (emitter.repeat.has_value()) {
+                repeat_count = emitter.repeat->count;
+            }
+            for (int r = 0; r < repeat_count; ++r) {
+                std::string instr_id = (repeat_count > 1)
+                                           ? fmt::format("{}_{}", emitter.id, r)
+                                           : emitter.id;
+                emitter_to_channel[instr_id] = ch_id;
+            }
+        }
+
+        for (const auto& cdef : effective_channels) {
+            ChannelPlan cp;
+            cp.channel_id = cdef.id;
+            cp.channel_index = cdef.index;
+            cp.rf = cdef.rf;
+
+            for (const auto& instr : result.render_instructions) {
+                auto it = emitter_to_channel.find(instr.emitter_id);
+                if (it != emitter_to_channel.end() && it->second == cdef.id) {
+                    cp.render_instructions.push_back(instr);
+                }
+            }
+
+            for (const auto& evt : result.timeline) {
+                if (evt.type == TimelineEventType::EmitterStart || evt.type == TimelineEventType::EmitterStop) {
+                    auto it = emitter_to_channel.find(evt.target_id);
+                    if (it != emitter_to_channel.end() && it->second == cdef.id) {
+                        cp.events.push_back(evt);
+                    }
+                } else {
+                    if (cdef.device == evt.target_id) {
+                        cp.events.push_back(evt);
+                    }
+                }
+            }
+
+            double total_cpu = 0.0;
+            size_t peak_memory = 0;
+            double min_gap = std::numeric_limits<double>::max();
+
+            for (const auto& instr : cp.render_instructions) {
+                double rate = instr.sample_rate;
+                double dur = instr.duration_sec;
+                double cf = complexity_factor(instr.waveform.type);
+                total_cpu += rate * dur * cf;
+                peak_memory += static_cast<size_t>(rate * dur * sizeof(std::complex<float>));
+            }
+
+            if (cp.render_instructions.size() > 1) {
+                std::vector<std::pair<double, double>> windows;
+                for (const auto& instr : cp.render_instructions) {
+                    windows.emplace_back(instr.start_sec, instr.start_sec + instr.duration_sec);
+                }
+                std::sort(windows.begin(), windows.end());
+                for (size_t i = 1; i < windows.size(); ++i) {
+                    double gap = windows[i].first - windows[i - 1].second;
+                    if (gap >= 0 && gap < min_gap) {
+                        min_gap = gap;
+                    }
+                }
+            }
+
+            double channel_duration = 0.0;
+            for (const auto& instr : cp.render_instructions) {
+                double end = instr.start_sec + instr.duration_sec;
+                if (end > channel_duration) channel_duration = end;
+            }
+
+            auto& est = cp.resource_estimate;
+            if (cdef.rf.rate_sps > 0.0 && channel_duration > 0.0) {
+                est.estimated_cpu_load = total_cpu / (cdef.rf.rate_sps * channel_duration);
+            }
+            est.peak_memory_bytes = peak_memory;
+            est.min_inter_emitter_gap_sec = (min_gap == std::numeric_limits<double>::max()) ? 0.0 : min_gap;
+            est.timing_feasible = true;
+
+            if (cp.render_instructions.size() > 1 && est.min_inter_emitter_gap_sec < 10e-6) {
+                est.timing_feasible = false;
+                est.warnings.emplace_back("Inter-emitter gap < 10us: timing may not be feasible");
+            }
+            if (est.estimated_cpu_load > 1.0) {
+                est.timing_feasible = false;
+                est.warnings.emplace_back("Estimated CPU load > 1.0: schedule may not be feasible");
+            }
+
+            result.channel_plans.push_back(std::move(cp));
+        }
+    }
+
+    result.run_mode = scenario.run.mode;
 
     return result;
 }

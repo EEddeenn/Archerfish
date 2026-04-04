@@ -9,6 +9,26 @@
 
 namespace archerfish::dsp {
 
+FileFormat detect_file_format(const std::string& path) {
+    if (path.size() >= 5 && path.substr(path.size() - 5) == ".ci16") {
+        return FileFormat::CI16;
+    }
+    return FileFormat::CF32;
+}
+
+void write_ci16(const std::string& path, const std::vector<std::complex<float>>& samples) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        throw std::runtime_error("Cannot open CI16 output file: " + path);
+    }
+    for (const auto& s : samples) {
+        int16_t re = static_cast<int16_t>(std::clamp(s.real(), -1.0f, 1.0f) * 32767.0f);
+        int16_t im = static_cast<int16_t>(std::clamp(s.imag(), -1.0f, 1.0f) * 32767.0f);
+        out.write(reinterpret_cast<const char*>(&re), sizeof(int16_t));
+        out.write(reinterpret_cast<const char*>(&im), sizeof(int16_t));
+    }
+}
+
 void FileSource::configure(const nlohmann::json& params) {
     configure_common(params);
     if (params.contains("path"))
@@ -34,9 +54,23 @@ void FileSource::prepare() {
         return;
     }
     file.seekg(0, std::ios::beg);
-    size_t num_samples = static_cast<size_t>(size) / sizeof(std::complex<float>);
-    data_.resize(num_samples);
-    file.read(reinterpret_cast<char*>(data_.data()), static_cast<std::streamsize>(num_samples * sizeof(std::complex<float>)));
+
+    auto fmt = detect_file_format(path_);
+    if (fmt == FileFormat::CI16) {
+        size_t num_samples = static_cast<size_t>(size) / (2 * sizeof(int16_t));
+        std::vector<int16_t> raw(num_samples * 2);
+        file.read(reinterpret_cast<char*>(raw.data()), static_cast<std::streamsize>(raw.size() * sizeof(int16_t)));
+        data_.resize(num_samples);
+        for (size_t i = 0; i < num_samples; ++i) {
+            float re = static_cast<float>(raw[i * 2]) / 32767.0f;
+            float im = static_cast<float>(raw[i * 2 + 1]) / 32767.0f;
+            data_[i] = std::complex<float>(re, im);
+        }
+    } else {
+        size_t num_samples = static_cast<size_t>(size) / sizeof(std::complex<float>);
+        data_.resize(num_samples);
+        file.read(reinterpret_cast<char*>(data_.data()), static_cast<std::streamsize>(num_samples * sizeof(std::complex<float>)));
+    }
 
     if (data_.empty()) {
         eof_ = true;

@@ -94,9 +94,7 @@ Archerfish should:
    - coherent transmission,
    - richer impairments,
    - calibration,
-   - buffered replay,
-   - remote control,
-   - optional UI.
+   - buffered replay.
 
 ## 2.2 Secondary goals
 
@@ -133,8 +131,6 @@ Archerfish should be implemented as:
 - **JSON:** nlohmann/json
 - **JSON Schema validation:** pboettch/json-schema-validator (FetchContent)
 - **Testing:** Catch2
-- **Future RPC:** Protobuf + gRPC
-- **Optional scripting:** Python 3 with thin wrapper later
 
 ## 3.2 Why this stack
 
@@ -1607,8 +1603,6 @@ While Archerfish is a local engineering tool, it still benefits from:
 - buffered replay
 - stronger calibration
 - richer impairments
-- remote API
-- possible UI layer
 
 ---
 
@@ -1875,9 +1869,8 @@ These are intentionally left as explicit future decisions rather than hidden amb
 2. ~~Should v1 support one mixed overlapping-emitter path, or reject all overlap until Phase 2?~~ **Resolved:** Overlap is allowed when emitters specify `"mixing": "additive"`. The planner groups overlapping emitters into `MixGroup` structures and renders them additively. Non-additive overlap is still rejected by the validator.
 3. What exact waveform sidecar metadata format should `wave gen` emit?
 4. Which JSON schema validator library best balances strictness and maintenance burden?
-5. When remote API work begins, should gRPC be embedded in the same process or in a service wrapper?
-6. Should Phase 2 implement AM/FM/PM as source types (like ModulatorSource) or as impairment-like wrappers that modulate an existing source?
-7. What resampler architecture should be used for non-integer sample rate ratios? Options include polyphase FIR, rational resampler (interpolate-then-decimate), or an arbitrary resampler (e.g., polyphase with fractional phase accumulator).
+5. Should Phase 2 implement AM/FM/PM as source types (like ModulatorSource) or as impairment-like wrappers that modulate an existing source?
+6. What resampler architecture should be used for non-integer sample rate ratios? Options include polyphase FIR, rational resampler (interpolate-then-decimate), or an arbitrary resampler (e.g., polyphase with fractional phase accumulator).
 
 ---
 
@@ -1889,8 +1882,7 @@ If built well, it can later grow into:
 - a richer waveform compiler,
 - a more advanced scene scheduler,
 - a calibrated lab source,
-- a multi-channel coherent transmitter,
-- a remotely controlled RF instrument platform.
+- a multi-channel coherent transmitter.
 
 ---
 

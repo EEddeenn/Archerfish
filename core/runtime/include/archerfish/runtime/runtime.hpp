@@ -27,6 +27,15 @@ struct RuntimeConfig {
     size_t queue_capacity{64};
     size_t block_size{32768};
     uint32_t channel{0};
+    scenario::RunMode run_mode{scenario::RunMode::Realtime};
+};
+
+struct ChannelMetrics {
+    uint32_t channel_index{0};
+    size_t samples_sent{0};
+    size_t blocks_sent{0};
+    size_t underruns{0};
+    double active_duration_sec{0.0};
 };
 
 struct MixGroupJob {
@@ -56,11 +65,30 @@ public:
         double actual_start_sec{0.0};
         double actual_stop_sec{0.0};
         double actual_duration_sec{0.0};
+        std::vector<ChannelMetrics> per_channel;
     };
     [[nodiscard]] RunMetrics get_metrics() const;
     [[nodiscard]] const std::vector<MarkerDispatch>& marker_dispatches() const;
+    [[nodiscard]] const std::vector<WaveformSwitchDispatch>& waveform_switch_dispatches() const;
+    [[nodiscard]] const std::vector<ImpairmentChangeDispatch>& impairment_change_dispatches() const;
 
 private:
+    struct ChannelExecutor {
+        uint32_t channel_index{0};
+        std::unique_ptr<SampleQueue> queue;
+        std::vector<RenderJob> render_jobs;
+        std::vector<MixGroupJob> mix_group_jobs;
+        std::unique_ptr<TxWorker> tx_worker;
+        std::unique_ptr<RenderWorker> render_worker;
+        ChannelMetrics metrics;
+    };
+
+    static std::vector<uint32_t> get_active_channels(const scenario::Plan& plan);
+    bool run_single_channel();
+    bool run_replay();
+    bool run_multi_channel(const std::vector<uint32_t>& channels);
+    void execute_channel_jobs(ChannelExecutor& exec, std::stop_token stoken);
+
     std::shared_ptr<hal::IHalDevice> device_;
     RuntimeConfig config_;
     StateMachine state_machine_;
@@ -75,6 +103,8 @@ private:
     std::mutex abort_mutex_;
     std::condition_variable abort_cv_;
     std::vector<MarkerDispatch> marker_dispatches_;
+    std::vector<WaveformSwitchDispatch> waveform_switch_dispatches_;
+    std::vector<ImpairmentChangeDispatch> impairment_change_dispatches_;
 };
 
 } // namespace archerfish::runtime
