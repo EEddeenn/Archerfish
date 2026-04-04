@@ -53,7 +53,7 @@ TEST_CASE("Runtime arm transitions Prepared to Armed", "[runtime][lifecycle]") {
 
 TEST_CASE("Runtime full lifecycle Created -> Completed", "[runtime][lifecycle]") {
     auto dev = std::make_shared<StubDevice>();
-    Runtime rt(dev, {.block_size = 1024, .queue_capacity = 16});
+    Runtime rt(dev, {.queue_capacity = 16, .block_size = 1024});
 
     archerfish::scenario::Scenario s;
     s.metadata.name = "full_lc";
