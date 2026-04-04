@@ -29,7 +29,7 @@ size_t CwSource::render_block(std::complex<float>* out, size_t max_samples) {
     for (size_t i = 0; i < to_generate; ++i) {
         out[i] = amp * std::complex<float>(static_cast<float>(std::cos(phase_)), static_cast<float>(std::sin(phase_)));
         phase_ += phase_inc;
-        if (phase_ > two_pi) phase_ -= two_pi;
+        if (phase_ >= two_pi) phase_ -= two_pi;
     }
 
     samples_produced_ += to_generate;

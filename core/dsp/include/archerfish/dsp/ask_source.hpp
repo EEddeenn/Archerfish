@@ -26,7 +26,7 @@ private:
     size_t samples_per_symbol_{0};
 
     std::mt19937 rng_;
-    float phase_{0.0f};
+    double phase_{0.0};
     size_t samples_within_symbol_{0};
     float current_symbol_value_{0.0f};
 

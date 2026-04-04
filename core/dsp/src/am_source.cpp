@@ -40,7 +40,7 @@ size_t AmSource::render_block(std::complex<float>* out, size_t max_samples) {
         out[i] = amp * envelope * std::complex<float>(static_cast<float>(std::cos(carrier_phase_)), static_cast<float>(std::sin(carrier_phase_)));
 
         carrier_phase_ += carrier_incr;
-        if (carrier_phase_ > two_pi) carrier_phase_ -= two_pi;
+        if (carrier_phase_ >= two_pi) carrier_phase_ -= two_pi;
 
         samples_produced_++;
     }

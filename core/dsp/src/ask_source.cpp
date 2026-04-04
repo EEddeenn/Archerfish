@@ -58,7 +58,7 @@ size_t AskSource::render_block(std::complex<float>* out, size_t max_samples) {
         out[i] = amp * std::complex<float>(static_cast<float>(std::cos(phase_)), static_cast<float>(std::sin(phase_)));
 
         phase_ += phase_inc;
-        if (phase_ > two_pi) phase_ -= two_pi;
+        if (phase_ >= two_pi) phase_ -= two_pi;
 
         samples_within_symbol_++;
         if (samples_within_symbol_ >= samples_per_symbol_) {

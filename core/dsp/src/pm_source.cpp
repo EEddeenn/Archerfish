@@ -41,7 +41,7 @@ size_t PmSource::render_block(std::complex<float>* out, size_t max_samples) {
         out[i] = amp * std::complex<float>(static_cast<float>(std::cos(total_phase)), static_cast<float>(std::sin(total_phase)));
 
         carrier_phase_ += carrier_incr;
-        if (carrier_phase_ > two_pi) carrier_phase_ -= two_pi;
+        if (carrier_phase_ >= two_pi) carrier_phase_ -= two_pi;
 
         samples_produced_++;
     }

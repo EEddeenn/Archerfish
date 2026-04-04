@@ -77,7 +77,7 @@ WaveformMetadata FskSource::report_metadata() const {
     meta.rms_amplitude = amplitude_ / std::sqrt(2.0);
     meta.crest_factor = std::sqrt(2.0);
     int M = modulation_order_;
-    double freq_span = (M > 1) ? 2.0 * deviation_hz_ * (M - 1) / (M - 1) : 0.0;
+    double freq_span = (M > 1) ? 2.0 * deviation_hz_ : 0.0;
     meta.nominal_bandwidth = freq_span + symbol_rate_;
     return meta;
 }

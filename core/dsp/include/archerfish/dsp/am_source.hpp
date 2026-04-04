@@ -22,7 +22,7 @@ private:
     double mod_freq_hz_{1000.0};
     double mod_depth_{0.5};
 
-    float carrier_phase_{0.0f};
+    double carrier_phase_{0.0};
 };
 
 } // namespace archerfish::dsp

@@ -24,13 +24,9 @@ void FmSource::prepare() {
 }
 
 size_t FmSource::render_block(std::complex<float>* out, size_t max_samples) {
-    size_t to_generate = max_samples;
-    if (duration_sec_.has_value()) {
-        size_t total_samples = static_cast<size_t>(std::round(duration_sec_.value() * sample_rate_));
-        if (samples_produced_ >= total_samples)
-            return 0;
-        to_generate = std::min(max_samples, total_samples - samples_produced_);
-    }
+    size_t to_generate = compute_block_size(max_samples);
+    if (to_generate == 0)
+        return 0;
 
     const double carrier_incr = archerfish::constants::kTwoPi * carrier_freq_hz_ / sample_rate_;
     const double mod_incr = archerfish::constants::kTwoPi * mod_freq_hz_ / sample_rate_;

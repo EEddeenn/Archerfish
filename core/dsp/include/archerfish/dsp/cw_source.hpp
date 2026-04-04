@@ -19,7 +19,7 @@ public:
 
 private:
     double frequency_hz_{0.0};
-    float phase_{0.0f};
+    double phase_{0.0};
 };
 
 } // namespace archerfish::dsp
