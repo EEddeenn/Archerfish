@@ -282,4 +282,4 @@ cmake --install build --prefix /usr/local
 
 ## License
 
-MIT
+Proprietary — see [LICENSE](LICENSE) for details. This is **not** an open-source license.

@@ -1,0 +1,238 @@
+Archerfish Evaluation-Only License 1.0
+
+Copyright (c) 2026 Shangren Lu
+All rights reserved.
+
+1. Definitions
+
+"Licensor" means Shangren Lu.
+
+"Software" means this repository and all source code, object code, documentation,
+waveform definitions, examples, configuration files, build scripts, assets, user
+interfaces, output formats, and all related materials provided with it.
+
+"You" means any individual or legal entity exercising permissions under this License.
+
+"Evaluation Purpose" means private, internal, non-commercial review, inspection,
+academic reading, security review, compatibility assessment, or offline testing
+solely for understanding or evaluating the Software, and not for operational,
+production, commercial, customer-facing, or service-delivery purposes.
+
+"Radio Output" means any generation, modulation, replay, transmission, streaming,
+playback, or output of RF, IF, baseband, or digitally synthesized signals to any
+SDR, USRP, DAC, RF front-end, test instrument, antenna path, or transmission-capable
+hardware.
+
+"Automated Extraction" means any scraping, crawling, indexing, mining, embedding,
+vectorization, dataset creation, model training, model fine-tuning, retrieval
+augmentation, or other automated collection or processing of the Software or its
+contents by software, scripts, bots, agents, pipelines, or machine learning systems
+for the purpose of training, improving, or augmenting machine learning or AI models.
+
+Notwithstanding the foregoing, standard developer tools (IDEs, text editors,
+linters, compilers, debuggers, local search and indexing tools, build systems,
+and version control tools) that do not feed into ML/AI model training or dataset
+construction are not considered Automated Extraction.
+
+"Derivative Works" means any work that is based on the Software and for which the
+editorial revisions, annotations, elaborations, or other modifications represent
+an original work of authorship, including but not limited to modifications,
+adaptations, translations, ports, or any altered version of the Software.
+
+2. Nature of License
+
+This License is proprietary and source-available. It is not an open source license.
+The Software is licensed, not sold. All rights not expressly granted are reserved
+by the Licensor.
+
+3. Limited License Grant
+
+Subject to Your full compliance with this License, the Licensor grants You a limited,
+personal, revocable, non-exclusive, non-transferable, non-sublicensable license to:
+
+(a) view, read, and download the Software; and
+
+(b) compile and run the unmodified Software solely for Evaluation Purposes on systems
+under Your control.
+
+No other rights are granted.
+
+4. No Modification; No Derivative Works
+
+You may not modify, adapt, translate, port, alter, create Derivative Works of,
+or prepare any modified version of the Software, except for purely local, temporary,
+non-persistent changes strictly necessary to compile the unmodified Software for
+Evaluation Purposes and not retained, shared, reused, or distributed outside that
+compilation process.
+
+You may not distribute or share any such temporary changes.
+
+5. Explicit Restrictions
+
+You may not, and may not permit others to:
+
+(a) sell, license, sublicense, rent, lease, assign, transfer, distribute, publish,
+or otherwise make the Software available to any third party;
+
+(b) distribute, publish, or share any copy, excerpt, modified version, Derivative
+Work, fork, port, translation, adaptation, or substantial portion of the Software;
+
+(c) publicly mirror, publicly fork, rehost, repost, republish, archive, or otherwise
+make the Software available on another repository, website, package registry,
+paste service, model hub, file-sharing service, or distribution channel;
+
+(d) use the Software for any commercial purpose;
+
+(e) use the Software in any production, operational, organizational, or business
+environment;
+
+(f) provide the Software as a hosted service, managed service, API, SaaS offering,
+embedded feature, or internal platform capability;
+
+(g) publicly capture, record, screenshot, screen-share, stream, broadcast, or
+otherwise visually or audiovisually disclose the Software's proprietary interface,
+workflow, source code, or outputs to any third party outside Your organization;
+provided, however, that sharing within Your organization for Evaluation Purposes,
+or sharing with the Licensor for support or feedback purposes, is permitted;
+
+(h) publish, disclose, or share any benchmark, performance result, comparison,
+test result, evaluation result, competitive analysis, detailed technical
+characterization, detailed technical review, or detailed description of the
+Software's behavior, architecture, or internals without prior written permission
+from the Licensor; acknowledging the Software's existence or describing it at
+a high level (e.g., "I evaluated Archerfish") is not restricted by this clause;
+
+(i) remove, alter, or obscure any copyright, proprietary notice, attribution, or
+license text included with the Software;
+
+(j) use the Licensor's name, project name, branding, or trademarks to endorse,
+advertise, or promote any product, service, benchmark, Derivative Work, or
+comparison without prior written permission.
+
+6. No Automated Extraction; No AI/ML Use
+
+You may not perform or permit any Automated Extraction of the Software.
+
+Without limiting the foregoing, You may not use the Software, its code, structure,
+documentation, comments, examples, interfaces, outputs, or metadata:
+
+(a) to train, fine-tune, align, evaluate, or improve any machine learning or AI model;
+
+(b) to build, augment, or populate any dataset, corpus, benchmark, embedding store,
+vector database, retrieval system, prompt library, or synthetic training set;
+
+(c) for automated scraping, indexing, code ingestion, summarization, or large-scale
+analysis by any bot, crawler, agent, extension, or automated system for the purpose
+of feeding into any ML/AI pipeline;
+
+(d) for use as input to any code-generation, code-completion, model distillation,
+or model-evaluation workflow.
+
+7. Compliance; Prohibited Uses
+
+You may not use the Software for any unlawful, unauthorized, harmful, deceptive,
+or regulated activity, including but not limited to interference, spoofing, jamming,
+impersonation of legitimate signals, evasion of regulation, unlawful testing, or
+any activity affecting communications, navigation, timing, safety, public systems,
+or critical infrastructure.
+
+This License does not grant or imply any radio license, equipment authorization,
+export authorization, import authorization, certification, or other governmental
+approval.
+
+You are solely responsible for compliance with all applicable laws and regulations.
+
+8. No Radio Use Without Written Permission
+
+You may not use the Software for any Radio Output.
+
+Without limiting the foregoing, You may not connect, control, drive, or use the
+Software with any USRP, SDR, RF front-end, DAC, transmitter chain, antenna path,
+signal generator path, or transmission-capable hardware for the purpose of emitting,
+streaming, replaying, or outputting any signal, whether over the air, through cable,
+into a shielded enclosure, into a test fixture, or into a terminated load, unless
+the Licensor has expressly authorized such use in prior written permission.
+
+The default permission granted by this License is limited to source review and
+software evaluation only, and does not include signal transmission rights of any kind.
+
+9. Ownership
+
+The Licensor retains all right, title, and interest in and to the Software, including
+all intellectual property rights, trade secrets, know-how, and all rights not
+expressly granted under this License.
+
+10. No Patent License
+
+No patent license is granted under this License, whether express, implied, by
+estoppel, or otherwise.
+
+11. Feedback
+
+If You send the Licensor any feedback, suggestions, bug reports, ideas, or proposed
+changes regarding the Software, You grant the Licensor a perpetual, worldwide,
+irrevocable, royalty-free, non-exclusive license to use, reproduce, modify, and
+incorporate into the Software such feedback without restriction or compensation.
+The Licensor has no obligation to use or attribute any feedback provided.
+
+12. Termination
+
+This License terminates automatically and immediately upon any breach of its terms.
+Upon termination, You must immediately cease all use of the Software and delete
+all copies in Your possession or control.
+
+13. Disclaimer of Warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, TITLE, NON-INFRINGEMENT, ACCURACY, AVAILABILITY, OR REGULATORY COMPLIANCE.
+
+14. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL THE LICENSOR BE LIABLE
+FOR ANY CLAIM, DAMAGES, LOSSES, LIABILITIES, FINES, PENALTIES, OR OTHER COSTS,
+WHETHER IN CONTRACT, TORT, OR OTHERWISE, ARISING FROM OR RELATED TO THE SOFTWARE
+OR ITS USE OR MISUSE.
+
+15. Commercial and Special Permissions
+
+Any use not expressly permitted under this License requires the Licensor's prior
+written permission, including but not limited to commercial use, redistribution,
+modification, Radio Output, production deployment, and publication of detailed
+technical reviews or benchmarks.
+
+Contact:
+<contact@shangren.lu>
+
+16. Governing Law
+
+This License shall be governed by the laws of the State of Victoria, Australia,
+without regard to its conflict of law principles. Any disputes arising under this
+License shall be subject to the exclusive jurisdiction of the courts of Victoria,
+Australia.
+
+17. Severability
+
+If any provision of this License is held to be unenforceable or invalid, such
+provision shall be changed and interpreted to accomplish its objectives to the
+greatest extent possible under applicable law, and the remaining provisions shall
+continue in full force and effect.
+
+18. Entire Agreement
+
+This License constitutes the entire agreement between You and the Licensor
+concerning the Software and supersedes all prior or contemporaneous communications,
+representations, or agreements regarding the Software.
+
+19. No Waiver
+
+Failure by the Licensor to enforce any right or provision of this License shall
+not constitute a waiver of such right or provision. Any waiver must be express
+and in writing.
+
+20. Export Compliance
+
+You must comply with all applicable export and re-export control laws and
+regulations, including the Export Administration Regulations (EAR) and the
+International Traffic in Arms Regulations (ITAR). You may not export, re-export,
+or transfer the Software without all required governmental authorizations.
