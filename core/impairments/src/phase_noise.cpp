@@ -26,7 +26,7 @@ void PhaseNoiseImpairment::apply(std::complex<float>* data, size_t count) {
         return;
     }
     for (size_t i = 0; i < count; ++i) {
-        phase_offset_ = alpha_ * phase_offset_ + (1.0 - alpha_) * dist_(rng_) * magnitude_rad_;
+        phase_offset_ = alpha_ * phase_offset_ + std::sqrt(1.0 - alpha_ * alpha_) * dist_(rng_) * magnitude_rad_;
         float cos_p = static_cast<float>(std::cos(phase_offset_));
         float sin_p = static_cast<float>(std::sin(phase_offset_));
         float re = data[i].real();

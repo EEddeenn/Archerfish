@@ -328,25 +328,39 @@ bool Runtime::run_single_channel() {
 
             auto config = member_job.waveform_config;
             config["sample_rate"] = member_job.sample_rate;
-            config["duration_sec"] = mgj.duration_sec;
+            config["duration_sec"] = member_job.duration_sec;
 
             source->configure(config);
             source->prepare();
 
+            size_t member_offset = static_cast<size_t>(
+                (member_job.start_sec - mgj.start_sec) * member_job.sample_rate);
+            size_t member_samples = static_cast<size_t>(
+                member_job.sample_rate * member_job.duration_sec);
+
             size_t rendered = 0;
-            while (rendered < total_samples) {
-                size_t to_render = std::min(total_samples - rendered, config_.block_size);
+            while (rendered < member_samples) {
+                size_t to_render = std::min(member_samples - rendered, config_.block_size);
                 std::vector<std::complex<float>> block(to_render);
                 size_t produced = source->render_block(block.data(), to_render);
                 if (produced == 0) break;
-                for (size_t s = 0; s < produced && (rendered + s) < total_samples; ++s) {
-                    mixed_buffer[rendered + s] += block[s];
+                for (size_t s = 0; s < produced; ++s) {
+                    size_t dst = member_offset + rendered + s;
+                    if (dst < total_samples) {
+                        mixed_buffer[dst] += block[s];
+                    }
                 }
                 rendered += produced;
             }
         }
 
         queue_ = std::make_unique<SampleQueue>(config_.queue_capacity);
+
+        {
+            std::lock_guard lock(active_tx_worker_mutex_);
+            active_tx_worker_ = std::make_unique<TxWorker>(*queue_, *device_, config_.channel, stop_source_);
+            active_tx_worker_->start();
+        }
 
         size_t offset = 0;
         while (offset < total_samples) {
@@ -367,12 +381,6 @@ bool Runtime::run_single_channel() {
         sentinel.end_of_burst = true;
         sentinel.start_of_burst = false;
         queue_->push_wait(std::move(sentinel), stoken);
-
-        {
-            std::lock_guard lock(active_tx_worker_mutex_);
-            active_tx_worker_ = std::make_unique<TxWorker>(*queue_, *device_, config_.channel, stop_source_);
-            active_tx_worker_->start();
-        }
 
         std::unique_ptr<TxWorker> local_worker;
         {
@@ -617,25 +625,36 @@ void Runtime::execute_channel_jobs(ChannelExecutor& exec, std::stop_token stoken
 
             auto config = member_job.waveform_config;
             config["sample_rate"] = member_job.sample_rate;
-            config["duration_sec"] = mgj.duration_sec;
+            config["duration_sec"] = member_job.duration_sec;
 
             source->configure(config);
             source->prepare();
 
+            size_t member_offset = static_cast<size_t>(
+                (member_job.start_sec - mgj.start_sec) * member_job.sample_rate);
+            size_t member_samples = static_cast<size_t>(
+                member_job.sample_rate * member_job.duration_sec);
+
             size_t rendered = 0;
-            while (rendered < total_samples) {
-                size_t to_render = std::min(total_samples - rendered, config_.block_size);
+            while (rendered < member_samples) {
+                size_t to_render = std::min(member_samples - rendered, config_.block_size);
                 std::vector<std::complex<float>> block(to_render);
                 size_t produced = source->render_block(block.data(), to_render);
                 if (produced == 0) break;
-                for (size_t s = 0; s < produced && (rendered + s) < total_samples; ++s) {
-                    mixed_buffer[rendered + s] += block[s];
+                for (size_t s = 0; s < produced; ++s) {
+                    size_t dst = member_offset + rendered + s;
+                    if (dst < total_samples) {
+                        mixed_buffer[dst] += block[s];
+                    }
                 }
                 rendered += produced;
             }
         }
 
         auto mg_queue = std::make_unique<SampleQueue>(config_.queue_capacity);
+
+        TxWorker tx_worker(*mg_queue, *device_, exec.channel_index, stop_source_);
+        tx_worker.start();
 
         size_t offset = 0;
         while (offset < total_samples) {
@@ -657,8 +676,6 @@ void Runtime::execute_channel_jobs(ChannelExecutor& exec, std::stop_token stoken
         sentinel.start_of_burst = false;
         mg_queue->push_wait(std::move(sentinel), stoken);
 
-        TxWorker tx_worker(*mg_queue, *device_, exec.channel_index, stop_source_);
-        tx_worker.start();
         tx_worker.join();
 
         exec.metrics.samples_sent += tx_worker.metrics().samples_sent.load();
