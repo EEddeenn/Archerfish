@@ -1,0 +1,32 @@
+{
+  "metadata": { "name": "fading_channel", "description": "CW through Rician fading channel (100 Hz Doppler, K=6)" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 915000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 20.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "cw1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 0.5,
+      "waveform": {
+        "type": "cw",
+        "amplitude": 0.3
+      },
+      "impairments": {
+        "fading_type": "rician",
+        "fading_doppler_hz": 100.0,
+        "fading_k_factor": 6.0
+      }
+    }
+  ]
+}

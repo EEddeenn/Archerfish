@@ -30,7 +30,7 @@
         "dc_offset_i": 0.005,
         "dc_offset_q": -0.005,
         "awgn_power": 0.001,
-        "amplitude_ripple_depth": 0.1,
+        "amplitude_ripple_db": 0.1,
         "amplitude_ripple_freq_hz": 100.0,
         "delay_sec": 0.000001,
         "burst_dropout_rate": 0.1,

@@ -1,0 +1,28 @@
+{
+  "metadata": { "name": "target_power", "description": "CW emitter targeting -10 dBm output power (requires calibration data)" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2450000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 20.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "cw1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 1.0,
+      "waveform": {
+        "type": "cw",
+        "amplitude": 0.2,
+        "target_power_dbm": -10.0
+      }
+    }
+  ]
+}

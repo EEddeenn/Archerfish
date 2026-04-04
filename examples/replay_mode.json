@@ -1,0 +1,30 @@
+{
+  "metadata": { "name": "replay_mode", "description": "Long-duration CW using replay-buffered mode for zero-underrun transmission" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2450000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 20.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "cw1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 60.0,
+      "waveform": {
+        "type": "cw",
+        "amplitude": 0.2
+      }
+    }
+  ],
+  "run": {
+    "mode": "replay"
+  }
+}

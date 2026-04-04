@@ -1,0 +1,38 @@
+{
+  "metadata": { "name": "waveform_switch_event", "description": "CW emitter that switches to chirp at t=2s via timed event" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2450000000.0,
+        "rate_sps": 20000000.0,
+        "gain_db": 20.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "cw1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 5.0,
+      "waveform": {
+        "type": "cw",
+        "amplitude": 0.2
+      }
+    }
+  ],
+  "events": [
+    {
+      "target_device": "usrp0",
+      "time_sec": 2.0,
+      "type": "waveform_switch",
+      "payload": {
+        "emitter_id": "cw1",
+        "new_waveform": "chirp"
+      }
+    }
+  ]
+}

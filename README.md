@@ -103,7 +103,20 @@ Scenarios are JSON files describing what to transmit, where, and when.
 }
 ```
 
-See `examples/` for complete scenarios (CW, chirp, QPSK, APSK, OFDM, mixed scene, timed events, burst repeat, additive mixing).
+See `examples/` for complete scenarios covering all features:
+
+| Category | Examples |
+|----------|----------|
+| Basic waveforms | CW, chirp, QPSK, APSK-16/32, OFDM, ASK, FSK |
+| Analog modulation | AM, FM, PM (`am_fm_modulation.json`) |
+| Pulse | Pulse train, repeated burst |
+| Multi-emitter | Additive mixing, mixed scene (waveform_ref + impairments) |
+| Events | Timed events (retune/gain), marker events |
+| Multi-channel | `multi_channel.json` (sync groups, per-channel RF) |
+| Replay mode | `replay_mode.json` (long-duration, zero-underrun) |
+| Channel impairments | Phase noise, multipath, fading (Rayleigh/Rician), PA nonlinearity (Rapp/Saleh) |
+| Dynamic events | Waveform switch, impairment enable/disable |
+| Power control | `target_power.json` (target dBm via calibration) |
 
 ### Supported waveform types
 

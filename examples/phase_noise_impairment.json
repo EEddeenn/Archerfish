@@ -1,0 +1,32 @@
+{
+  "metadata": { "name": "phase_noise_impairment", "description": "CW with oscillator phase noise (flicker PSD, 1 kHz bandwidth)" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2450000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 20.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "cw1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 0.1,
+      "waveform": {
+        "type": "cw",
+        "amplitude": 0.2
+      },
+      "impairments": {
+        "phase_noise_bandwidth_hz": 1000.0,
+        "phase_noise_magnitude_rad": 0.1,
+        "phase_noise_psd_shape": "flicker"
+      }
+    }
+  ]
+}

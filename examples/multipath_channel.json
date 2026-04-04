@@ -1,0 +1,34 @@
+{
+  "metadata": { "name": "multipath_channel", "description": "QPSK through a 2-tap multipath channel (10-sample delay, -6 dB echo)" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 2400000000.0,
+        "rate_sps": 10000000.0,
+        "gain_db": 20.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "qpsk1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 0.0,
+      "duration_sec": 0.05,
+      "waveform": {
+        "type": "qpsk",
+        "symbol_rate": 1000000.0,
+        "samples_per_symbol": 8,
+        "rrc_alpha": 0.35,
+        "amplitude": 0.2
+      },
+      "impairments": {
+        "multipath_delay_samples": 10,
+        "multipath_amplitude": 0.5
+      }
+    }
+  ]
+}
