@@ -2,6 +2,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/impairments/multipath.hpp"
@@ -78,4 +79,9 @@ TEST_CASE("Multipath state persists across multiple apply calls with large delay
     mp.apply(batch2.data(), batch2.size());
 
     REQUIRE_THAT(batch2[0].real(), WithinAbs(1.0f, 1e-6));
+}
+
+TEST_CASE("Multipath rejects non-finite amplitude", "[impairments][multipath][taps]") {
+    REQUIRE_THROWS_AS(MultipathImpairment(1, std::numeric_limits<float>::quiet_NaN()),
+                      std::invalid_argument);
 }

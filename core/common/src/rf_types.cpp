@@ -1,6 +1,9 @@
 #include "archerfish/common/rf_types.hpp"
 
 #include <cmath>
+#include <limits>
+#include <stdexcept>
+
 #include <fmt/format.h>
 
 namespace archerfish::common {
@@ -10,8 +13,17 @@ double TimeSpec::to_seconds() const {
 }
 
 TimeSpec TimeSpec::from_seconds(double sec) {
-    double int_part;
-    double frac = std::modf(sec, &int_part);
+    if (!std::isfinite(sec)) {
+        throw std::invalid_argument("TimeSpec seconds must be finite");
+    }
+
+    double int_part = std::floor(sec);
+    if (int_part < static_cast<double>(std::numeric_limits<int64_t>::lowest()) ||
+        int_part >= static_cast<double>(std::numeric_limits<int64_t>::max())) {
+        throw std::out_of_range("TimeSpec seconds out of int64 range");
+    }
+
+    double frac = sec - int_part;
     return TimeSpec{static_cast<int64_t>(int_part), frac * 1e9};
 }
 

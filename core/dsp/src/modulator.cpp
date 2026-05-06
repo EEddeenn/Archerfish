@@ -4,9 +4,37 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <numeric>
+#include <stdexcept>
+#include <string>
 
 namespace archerfish::dsp {
+
+namespace {
+
+constexpr size_t kMaxSamplesPerSymbol = 1024;
+
+size_t parse_size_param(const nlohmann::json& value, const char* name) {
+    if (!value.is_number_integer() && !value.is_number_unsigned()) {
+        throw std::invalid_argument(std::string(name) + " must be an integer");
+    }
+    if (value.is_number_integer()) {
+        const auto parsed = value.get<std::int64_t>();
+        if (parsed < 0) {
+            throw std::invalid_argument(std::string(name) + " must be non-negative");
+        }
+        return static_cast<size_t>(parsed);
+    }
+    const auto parsed = value.get<std::uint64_t>();
+    if (parsed > static_cast<std::uint64_t>(std::numeric_limits<size_t>::max())) {
+        throw std::out_of_range(std::string(name) + " exceeds size_t range");
+    }
+    return static_cast<size_t>(parsed);
+}
+
+} // namespace
 
 void ModulatorSource::build_rrc_taps() {
     RrcFilterDesign design;
@@ -26,30 +54,62 @@ std::complex<float> ModulatorSource::map_symbol(uint32_t bits) {
 }
 
 void ModulatorSource::configure(const nlohmann::json& params) {
-    configure_common(params);
+    ModulationType next_modulation = modulation_;
+    double next_symbol_rate = symbol_rate_;
+    size_t next_samples_per_symbol = samples_per_symbol_;
+    double next_rrc_alpha = rrc_alpha_;
+
     std::string mod;
     if (params.contains("modulation")) {
-        mod = params["modulation"].get<std::string>();
+        mod = string_param(params, "modulation");
     } else if (params.contains("type")) {
-        mod = params["type"].get<std::string>();
+        mod = string_param(params, "type");
     }
     if (!mod.empty()) {
         std::string upper = mod;
         std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
-        if (upper == "BPSK") modulation_ = ModulationType::BPSK;
-        else if (upper == "QPSK") modulation_ = ModulationType::QPSK;
-        else if (upper == "PSK8" || upper == "8PSK") modulation_ = ModulationType::PSK8;
-        else if (upper == "QAM16" || upper == "16QAM") modulation_ = ModulationType::QAM16;
-        else if (upper == "QAM64" || upper == "64QAM") modulation_ = ModulationType::QAM64;
-        else if (upper == "APSK16" || upper == "16APSK") modulation_ = ModulationType::APSK16;
-        else if (upper == "APSK32" || upper == "32APSK") modulation_ = ModulationType::APSK32;
+        if (upper == "BPSK") next_modulation = ModulationType::BPSK;
+        else if (upper == "QPSK") next_modulation = ModulationType::QPSK;
+        else if (upper == "PSK8" || upper == "8PSK") next_modulation = ModulationType::PSK8;
+        else if (upper == "QAM16" || upper == "16QAM") next_modulation = ModulationType::QAM16;
+        else if (upper == "QAM64" || upper == "64QAM") next_modulation = ModulationType::QAM64;
+        else if (upper == "APSK16" || upper == "16APSK") next_modulation = ModulationType::APSK16;
+        else if (upper == "APSK32" || upper == "32APSK") next_modulation = ModulationType::APSK32;
+        else throw std::invalid_argument("unsupported modulation: " + mod);
     }
-    if (params.contains("symbol_rate"))
-        symbol_rate_ = params["symbol_rate"].get<double>();
-    if (params.contains("samples_per_symbol"))
-        samples_per_symbol_ = params["samples_per_symbol"].get<size_t>();
-    if (params.contains("rrc_alpha"))
-        rrc_alpha_ = params["rrc_alpha"].get<double>();
+    if (params.contains("symbol_rate")) {
+        next_symbol_rate = number_param(params, "symbol_rate");
+        validate_positive(next_symbol_rate, "symbol_rate");
+    }
+    if (params.contains("samples_per_symbol")) {
+        next_samples_per_symbol = parse_size_param(params["samples_per_symbol"], "samples_per_symbol");
+        if (next_samples_per_symbol == 0) {
+            throw std::invalid_argument("samples_per_symbol must be positive");
+        }
+        if (next_samples_per_symbol > kMaxSamplesPerSymbol) {
+            throw std::invalid_argument("samples_per_symbol exceeds maximum supported value");
+        }
+    }
+    if (params.contains("rrc_alpha")) {
+        next_rrc_alpha = number_param(params, "rrc_alpha");
+        validate_positive(next_rrc_alpha, "rrc_alpha");
+        if (next_rrc_alpha > 1.0) {
+            throw std::invalid_argument("rrc_alpha must be <= 1");
+        }
+    }
+
+    configure_common(params);
+    modulation_ = next_modulation;
+    symbol_rate_ = next_symbol_rate;
+    samples_per_symbol_ = next_samples_per_symbol;
+    rrc_alpha_ = next_rrc_alpha;
+    constellation_.clear();
+    rrc_taps_.clear();
+    shaped_buffer_.clear();
+    filter_tail_.clear();
+    output_offset_ = 0;
+    peak_to_rms_ratio_ = std::sqrt(2.0);
+    rms_ratio_ = 1.0 / std::sqrt(2.0);
 }
 
 void ModulatorSource::prepare() {
@@ -116,8 +176,18 @@ void ModulatorSource::prepare() {
 }
 
 size_t ModulatorSource::render_block(std::complex<float>* out, size_t max_samples) {
+    if (max_samples == 0) {
+        return 0;
+    }
+    if (out == nullptr) {
+        throw std::invalid_argument("ModulatorSource render output buffer must not be null");
+    }
+    if (constellation_.empty() || rrc_taps_.empty() || filter_tail_.size() + 1 != rrc_taps_.size()) {
+        throw std::logic_error("ModulatorSource must be prepared before rendering");
+    }
+
     if (duration_sec_.has_value()) {
-        size_t total_samples = static_cast<size_t>(std::round(duration_sec_.value() * sample_rate_));
+        size_t total_samples = checked_sample_count(sample_rate_, duration_sec_.value());
         if (samples_produced_ >= total_samples)
             return 0;
         max_samples = std::min(max_samples, total_samples - samples_produced_);

@@ -5,14 +5,19 @@
 #include <cstddef>
 
 #include "archerfish/common/constants.hpp"
+#include "validation.hpp"
 
 namespace archerfish::impairments {
 
 CfoImpairment::CfoImpairment(double cfo_hz, double sample_rate)
     : cfo_hz_(cfo_hz),
-      sample_rate_(sample_rate) {}
+      sample_rate_(sample_rate) {
+    detail::require_finite(cfo_hz_, "CFO frequency");
+    detail::require_positive_finite(sample_rate_, "CFO sample rate");
+}
 
 void CfoImpairment::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "CfoImpairment");
     if (!enabled_) {
         return;
     }

@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/impairments/pa_nonlinearity.hpp"
@@ -78,4 +79,14 @@ TEST_CASE("PA Saleh low amplitude approximates linear gain a0", "[impairments][p
 
     float expected = static_cast<float>(2.1587 * small_amp);
     REQUIRE_THAT(std::abs(data[0]), WithinRel(expected, 0.01f));
+}
+
+TEST_CASE("PA rejects invalid numeric parameters", "[impairments][pa][rapp_vs_saleh]") {
+    REQUIRE_THROWS_AS(PaNonlinearityImpairment("rapp", 0.0, 2.0, 0.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(PaNonlinearityImpairment("rapp", 1.0, -1.0, 0.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(PaNonlinearityImpairment("rapp", 1.0, 2.0,
+                                               std::numeric_limits<double>::quiet_NaN()),
+                      std::invalid_argument);
 }

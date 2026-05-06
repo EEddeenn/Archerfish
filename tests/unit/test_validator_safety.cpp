@@ -36,6 +36,19 @@ TEST_CASE("Validator safety warning for excessive amplitude", "[validator][safet
     REQUIRE(has_warning(result, "W_SAFETY_AMPLITUDE_EXCEEDED"));
 }
 
+TEST_CASE("Validator safety warning resolves waveform reference amplitude", "[validator][safety]") {
+    Scenario s;
+    s.metadata.name = "safety_ref_amp";
+    s.devices.push_back({"usrp0", 0, {2.45e9, 10000000.0, 10.0}});
+    s.waveforms.push_back(WaveformDef{"loud", WaveformType::CW, {{"amplitude", 0.8}}});
+    s.emitters.push_back({"cw1", "usrp0", 0, 0.0, 1.0,
+                          std::nullopt,
+                          "loud", std::nullopt, MixingMode::None, std::nullopt, std::nullopt});
+
+    auto result = validate(s);
+    REQUIRE(has_warning(result, "W_SAFETY_AMPLITUDE_EXCEEDED"));
+}
+
 TEST_CASE("Validator safety warning for out-of-range frequency", "[validator][safety]") {
     Scenario s;
     s.metadata.name = "safety_freq";

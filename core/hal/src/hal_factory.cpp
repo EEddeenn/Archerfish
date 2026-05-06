@@ -8,25 +8,38 @@
 #include <spdlog/spdlog.h>
 #include <fmt/format.h>
 
+#include <algorithm>
+#include <cctype>
 #include <mutex>
 #include <stdexcept>
+#include <string_view>
 
 namespace archerfish::hal {
 
 namespace {
+#ifdef ARCHERFISH_HAS_UHD
 struct UhdDeviceInfo {
     uhd::device_addr_t addr;
     std::string id;
 };
+#endif
 
 std::mutex& cache_mutex() {
     static std::mutex m;
     return m;
 }
 
+#ifdef ARCHERFISH_HAS_UHD
 std::vector<UhdDeviceInfo>& cached_uhd_devices() {
     static std::vector<UhdDeviceInfo> devices;
     return devices;
+}
+#endif
+
+bool is_blank(std::string_view value) {
+    return std::all_of(value.begin(), value.end(), [](unsigned char ch) {
+        return std::isspace(ch) != 0;
+    });
 }
 
 void discover_uhd_into(std::vector<DiscoveredDevice>& out) {
@@ -49,7 +62,9 @@ void discover_uhd_into(std::vector<DiscoveredDevice>& out) {
 std::vector<DiscoveredDevice> discover_devices() {
     std::lock_guard<std::mutex> lock(cache_mutex());
     std::vector<DiscoveredDevice> devices;
+#ifdef ARCHERFISH_HAS_UHD
     cached_uhd_devices().clear();
+#endif
 
     discover_uhd_into(devices);
 
@@ -65,6 +80,10 @@ std::vector<DiscoveredDevice> discover_devices() {
 }
 
 std::unique_ptr<IHalDevice> open_device(const std::string& device_id) {
+    if (is_blank(device_id)) {
+        throw std::invalid_argument("Device ID must not be empty");
+    }
+
     if (device_id == "stub0") {
         return std::make_unique<StubDevice>("stub0");
     }

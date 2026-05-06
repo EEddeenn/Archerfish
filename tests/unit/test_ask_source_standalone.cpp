@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/dsp/ask_source.hpp"
@@ -103,4 +104,26 @@ TEST_CASE("ASK source metadata reports sample rate", "[dsp][ask_source]") {
     auto meta = src.report_metadata();
     REQUIRE_THAT(meta.sample_rate, WithinAbs(2e6, 1e-9));
     REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.5 * std::sqrt(2.0), 1e-9));
+    REQUIRE_THAT(meta.nominal_bandwidth, WithinAbs(1e3, 1e-9));
+}
+
+TEST_CASE("ASK source rejects symbol rate above sample rate", "[dsp][ask_source]") {
+    AskSource src;
+    src.configure({{"amplitude", 0.5},
+                   {"frequency_hz", 0.0},
+                   {"symbol_rate", 2000.0},
+                   {"sample_rate", 1000.0},
+                   {"seed", 42}});
+
+    CHECK_THROWS_AS(src.prepare(), std::invalid_argument);
+}
+
+TEST_CASE("ASK source rejects peak amplitude beyond float range", "[dsp][ask_source]") {
+    AskSource src;
+    CHECK_THROWS_AS(src.configure({{"amplitude", static_cast<double>(std::numeric_limits<float>::max())},
+                                   {"frequency_hz", 0.0},
+                                   {"symbol_rate", 1e3},
+                                   {"sample_rate", 1e6},
+                                   {"num_levels", 2}}),
+                    std::out_of_range);
 }

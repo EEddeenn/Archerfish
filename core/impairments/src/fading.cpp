@@ -5,6 +5,7 @@
 #include <cstddef>
 
 #include "archerfish/common/constants.hpp"
+#include "validation.hpp"
 
 namespace archerfish::impairments {
 
@@ -14,8 +15,14 @@ FadingImpairment::FadingImpairment(double doppler_hz, double sample_rate,
       doppler_hz_(doppler_hz),
       k_factor_(type == "rician" ? k_factor : 0.0),
       rng_(42) {
-    if (sample_rate_ <= 0.0)
-        throw std::invalid_argument("FadingImpairment: sample_rate must be > 0");
+    detail::require_positive_finite(sample_rate_, "Fading sample rate");
+    detail::require_nonnegative_finite(doppler_hz_, "Fading doppler");
+    if (type != "rayleigh" && type != "rician") {
+        throw std::invalid_argument("Fading type must be 'rayleigh' or 'rician'");
+    }
+    if (type == "rician") {
+        detail::require_nonnegative_finite(k_factor, "Fading K-factor");
+    }
     init_sinusoids();
 }
 
@@ -63,6 +70,7 @@ std::complex<float> FadingImpairment::compute_gain(size_t sample) const {
 }
 
 void FadingImpairment::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "FadingImpairment");
     if (!enabled_) {
         return;
     }

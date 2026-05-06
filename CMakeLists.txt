@@ -59,6 +59,9 @@ FetchContent_Declare(
 )
 set(JSON_SCHEMA_VALIDATOR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(json_schema_validator)
+set_target_properties(nlohmann_json_schema_validator PROPERTIES
+    PUBLIC_HEADER "${json_schema_validator_SOURCE_DIR}/src/nlohmann/json-schema.hpp"
+)
 
 # yaml-cpp — YAML scenario support (disabled: network fetch issue)
 # FetchContent_Declare(
@@ -89,6 +92,19 @@ set(ARCHERFISH_INSTALL_DATADIR "${CMAKE_INSTALL_FULL_DATADIR}/archerfish")
 add_subdirectory(core)
 add_subdirectory(cli)
 
+foreach(archerfish_library IN ITEMS
+    archerfish_common
+    archerfish_hal
+    archerfish_runtime
+    archerfish_dsp
+    archerfish_impairments
+    archerfish_scheduler
+    archerfish_reporting
+    archerfish_cli
+)
+    target_compile_features(${archerfish_library} PUBLIC cxx_std_23)
+endforeach()
+
 # --- Executable ---
 add_subdirectory(src)
 
@@ -105,6 +121,7 @@ install(TARGETS nlohmann_json_schema_validator
     EXPORT archerfish-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nlohmann
 )
 
 # --- Install all library targets with export set ---

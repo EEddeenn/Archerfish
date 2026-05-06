@@ -2,7 +2,9 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
+#include <limits>
 #include <numeric>
+#include <stdexcept>
 #include <vector>
 
 #include "archerfish/dsp/pulse_shaper.hpp"
@@ -71,4 +73,24 @@ TEST_CASE("RRC filter taps are energy-normalized", "[dsp][pulse_shaper]") {
         energy += static_cast<double>(t) * static_cast<double>(t);
     }
     REQUIRE_THAT(energy, WithinAbs(1.0, 1e-4));
+}
+
+TEST_CASE("RRC filter rejects invalid design parameters", "[dsp][pulse_shaper]") {
+    RrcFilterDesign design;
+
+    design.alpha = 0.0;
+    REQUIRE_THROWS_AS(design.design(), std::invalid_argument);
+
+    design.alpha = std::numeric_limits<double>::quiet_NaN();
+    REQUIRE_THROWS_AS(design.design(), std::invalid_argument);
+
+    design.alpha = 0.35;
+    design.span_symbols = 0;
+    REQUIRE_THROWS_AS(design.design(), std::invalid_argument);
+    REQUIRE_THROWS_AS(design.num_taps(), std::invalid_argument);
+
+    design.span_symbols = 6;
+    design.samples_per_symbol = 0;
+    REQUIRE_THROWS_AS(design.design(), std::invalid_argument);
+    REQUIRE_THROWS_AS(design.num_taps(), std::invalid_argument);
 }

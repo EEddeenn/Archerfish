@@ -2,6 +2,9 @@
 
 #include "archerfish/runtime/spsc_queue.hpp"
 
+#include <limits>
+#include <stdexcept>
+
 using namespace archerfish::runtime;
 
 TEST_CASE("SpscQueue push and pop single item", "[runtime][spsc]") {
@@ -39,6 +42,11 @@ TEST_CASE("SpscQueue empty queue returns nullopt on pop", "[runtime][spsc]") {
 TEST_CASE("SpscQueue capacity is respected", "[runtime][spsc]") {
     SpscQueue<int> q(4);
     REQUIRE(q.capacity() == 4);
+}
+
+TEST_CASE("SpscQueue rejects invalid capacities", "[runtime][spsc]") {
+    CHECK_THROWS_AS(SpscQueue<int>(0), std::invalid_argument);
+    CHECK_THROWS_AS(SpscQueue<int>(std::numeric_limits<size_t>::max()), std::overflow_error);
 }
 
 TEST_CASE("SpscQueue multiple push/pop cycles work correctly", "[runtime][spsc]") {

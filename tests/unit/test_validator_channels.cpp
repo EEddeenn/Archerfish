@@ -65,3 +65,42 @@ TEST_CASE("Valid channel definitions pass validation", "[validator][channels]") 
     auto result = validate(s);
     REQUIRE(result.ok());
 }
+
+TEST_CASE("Explicit channel RF settings must be valid", "[validator][channels]") {
+    auto s = make_base_scenario();
+    s.channel_defs.push_back({"ch0", "usrp0", 0, {0.0, -1.0, 20.0}});
+    s.emitters[0].channel_id = "ch0";
+
+    auto result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error(result, "V027_INVALID_CHANNEL_FREQ"));
+    CHECK(has_error(result, "V027_INVALID_CHANNEL_RATE"));
+}
+
+TEST_CASE("Overlapping emitters on different explicit channels pass validation", "[validator][channels]") {
+    auto s = make_base_scenario();
+    s.channel_defs.push_back({"ch0", "usrp0", 0, {2450000000.0, 10000000.0, 20.0}});
+    s.channel_defs.push_back({"ch1", "usrp0", 1, {2450000000.0, 10000000.0, 20.0}});
+    s.emitters[0].channel_id = "ch0";
+
+    auto second = s.emitters[0];
+    second.id = "cw2";
+    second.channel_id = "ch1";
+    s.emitters.push_back(second);
+
+    auto result = validate(s);
+    REQUIRE(result.ok());
+}
+
+TEST_CASE("Overlapping emitters on same explicit channel fail validation", "[validator][channels]") {
+    auto s = make_base_scenario();
+    s.channel_defs.push_back({"ch0", "usrp0", 0, {2450000000.0, 10000000.0, 20.0}});
+    s.emitters[0].channel_id = "ch0";
+
+    auto second = s.emitters[0];
+    second.id = "cw2";
+    s.emitters.push_back(second);
+
+    auto result = validate(s);
+    REQUIRE(has_error(result, "V002_OVERLAPPING_EMITTERS"));
+}

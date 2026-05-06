@@ -3,8 +3,10 @@
 #include <atomic>
 #include <complex>
 #include <condition_variable>
+#include <limits>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <stop_token>
 #include <vector>
 
@@ -14,7 +16,7 @@ template <typename T>
 class SpscQueue {
 public:
     explicit SpscQueue(size_t capacity)
-        : buffer_(capacity + 1), capacity_(capacity + 1) {}
+        : buffer_(checked_storage_capacity(capacity)), capacity_(checked_storage_capacity(capacity)) {}
 
     SpscQueue(const SpscQueue&) = delete;
     SpscQueue& operator=(const SpscQueue&) = delete;
@@ -124,6 +126,16 @@ public:
     std::condition_variable cv_not_full_;
 
 private:
+    static size_t checked_storage_capacity(size_t capacity) {
+        if (capacity == 0) {
+            throw std::invalid_argument("SpscQueue capacity must be greater than zero");
+        }
+        if (capacity == std::numeric_limits<size_t>::max()) {
+            throw std::overflow_error("SpscQueue capacity is too large");
+        }
+        return capacity + 1;
+    }
+
     std::vector<T> buffer_;
     size_t capacity_;
     alignas(64) std::atomic<size_t> head_{0};

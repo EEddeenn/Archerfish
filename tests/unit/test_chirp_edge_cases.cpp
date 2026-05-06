@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/dsp/chirp_source.hpp"
@@ -23,6 +24,11 @@ TEST_CASE("Chirp with same f0 and f1 produces CW", "[dsp][chirp][edge]") {
     for (size_t i = 1; i < n; ++i) {
         REQUIRE_THAT(std::abs(buf[i]), WithinAbs(std::abs(buf[0]), 0.01f));
     }
+
+    auto meta = src.report_metadata();
+    REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.5, 1e-9));
+    REQUIRE_THAT(meta.rms_amplitude, WithinAbs(0.5, 1e-9));
+    REQUIRE_THAT(meta.crest_factor, WithinAbs(1.0, 1e-9));
 }
 
 TEST_CASE("Chirp with negative sweep", "[dsp][chirp][edge]") {
@@ -65,6 +71,27 @@ TEST_CASE("Chirp duration limit respected", "[dsp][chirp][edge]") {
 
     size_t n2 = src.render_block(buf.data(), buf.size());
     REQUIRE(n2 == 0);
+}
+
+TEST_CASE("Chirp rejects non-finite sweep frequencies", "[dsp][chirp][edge]") {
+    ChirpSource src;
+    CHECK_THROWS_AS(src.configure({{"f0_hz", "low"}, {"f1_hz", 1.0}, {"sample_rate", 1e6}, {"duration_sec", 0.001}}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"f0_hz", 1.0}, {"f1_hz", "high"}, {"sample_rate", 1e6}, {"duration_sec", 0.001}}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"f0_hz", std::numeric_limits<double>::quiet_NaN()}, {"f1_hz", 1.0}, {"sample_rate", 1e6}, {"duration_sec", 0.001}}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"f0_hz", 1.0}, {"f1_hz", std::numeric_limits<double>::infinity()}, {"sample_rate", 1e6}, {"duration_sec", 0.001}}),
+                    std::invalid_argument);
+}
+
+TEST_CASE("Chirp render validates output buffer", "[dsp][chirp][edge]") {
+    ChirpSource src;
+    src.configure({{"sample_rate", 1e6}, {"duration_sec", 0.001}, {"f0_hz", 0.0}, {"f1_hz", 1.0}});
+    src.prepare();
+
+    CHECK(src.render_block(nullptr, 0) == 0);
+    CHECK_THROWS_AS(src.render_block(nullptr, 1), std::invalid_argument);
 }
 
 TEST_CASE("Chirp reset reproduces identical output", "[dsp][chirp][edge]") {

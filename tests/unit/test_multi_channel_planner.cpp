@@ -5,6 +5,8 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+
 using archerfish::dsp::WaveformType;
 using namespace archerfish::scenario;
 using namespace archerfish::common;
@@ -45,7 +47,7 @@ Scenario make_two_channel_scenario() {
     EmitterDef em1;
     em1.id = "cw1";
     em1.device = "usrp0";
-    em1.channel = 1;
+    em1.channel = 0;
     em1.channel_id = "ch1";
     em1.start_after_sec = 0.5;
     em1.duration_sec = 3.0;
@@ -171,6 +173,12 @@ TEST_CASE("Multi-channel planner creates per-channel plans from explicit channel
     REQUIRE(p.channel_plans[1].channel_index == 1);
     REQUIRE_THAT(p.channel_plans[1].rf.freq_hz, WithinAbs(2.45e9, 1.0));
     REQUIRE_THAT(p.channel_plans[1].rf.rate_sps, WithinAbs(20e6, 1.0));
+
+    REQUIRE(p.channels.size() == 2);
+    REQUIRE(p.channels[0].channel_index == 0);
+    REQUIRE_THAT(p.channels[0].rf.rate_sps, WithinAbs(10e6, 1.0));
+    REQUIRE(p.channels[1].channel_index == 1);
+    REQUIRE_THAT(p.channels[1].rf.rate_sps, WithinAbs(20e6, 1.0));
 }
 
 TEST_CASE("Multi-channel planner backward compatibility (no channel_defs → auto-generated channel_plans)", "[planner][multi_channel]") {
@@ -216,6 +224,7 @@ TEST_CASE("Per-channel emitter assignment by channel_id", "[planner][multi_chann
     REQUIRE(p.channel_plans[1].render_instructions[0].emitter_id == "cw1");
     REQUIRE_THAT(p.channel_plans[1].render_instructions[0].start_sec, WithinAbs(0.5, 1e-12));
     REQUIRE_THAT(p.channel_plans[1].render_instructions[0].duration_sec, WithinAbs(3.0, 1e-12));
+    REQUIRE_THAT(p.channel_plans[1].render_instructions[0].sample_rate, WithinAbs(20e6, 1.0));
 }
 
 TEST_CASE("Per-channel emitter assignment by device+channel pair", "[planner][multi_channel]") {
@@ -252,6 +261,14 @@ TEST_CASE("Per-channel event assignment", "[planner][multi_channel]") {
     REQUIRE(count_type(p.channel_plans[1], TimelineEventType::EmitterStart) == 1);
     REQUIRE(count_type(p.channel_plans[1], TimelineEventType::EmitterStop) == 1);
 
+    auto ch1_start = std::find_if(p.channel_plans[1].events.begin(), p.channel_plans[1].events.end(),
+                                  [](const TimelineEvent& event) {
+                                      return event.type == TimelineEventType::EmitterStart;
+                                  });
+    REQUIRE(ch1_start != p.channel_plans[1].events.end());
+    REQUIRE(ch1_start->payload["channel"].get<uint32_t>() == 1);
+    REQUIRE(ch1_start->payload["channel_id"].get<std::string>() == "ch1");
+
     auto count_non_emitter = [](const ChannelPlan& cp) {
         size_t n = 0;
         for (const auto& e : cp.events) {
@@ -264,6 +281,28 @@ TEST_CASE("Per-channel event assignment", "[planner][multi_channel]") {
 
     REQUIRE(count_non_emitter(p.channel_plans[0]) == 2);
     REQUIRE(count_non_emitter(p.channel_plans[1]) == 2);
+}
+
+TEST_CASE("Channel-scoped RF events are assigned only to the matching channel plan", "[planner][multi_channel]") {
+    auto scenario = make_two_channel_with_events_scenario();
+    scenario.events[0].payload["channel"] = 1;
+
+    auto result = plan(scenario);
+    REQUIRE(result.has_value());
+
+    const auto& p = result.value();
+    REQUIRE(p.channel_plans.size() == 2);
+
+    auto count_type = [](const ChannelPlan& cp, TimelineEventType type) {
+        size_t n = 0;
+        for (const auto& event : cp.events) {
+            if (event.type == type) ++n;
+        }
+        return n;
+    };
+
+    REQUIRE(count_type(p.channel_plans[0], TimelineEventType::GainChange) == 0);
+    REQUIRE(count_type(p.channel_plans[1], TimelineEventType::GainChange) == 1);
 }
 
 TEST_CASE("Per-channel resource estimate", "[planner][multi_channel]") {

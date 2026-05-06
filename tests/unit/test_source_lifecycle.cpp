@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -44,6 +45,27 @@ TEST_CASE("Source lifecycle: multiple render blocks", "[dsp][lifecycle]") {
     }
 }
 
+TEST_CASE("CW source keeps prior configuration after invalid reconfigure", "[dsp][lifecycle]") {
+    CwSource src;
+    src.configure({{"amplitude", 0.2}, {"frequency_hz", 100e3}, {"sample_rate", 1e6}});
+
+    CHECK_THROWS_AS(src.configure({
+                        {"amplitude", 0.8},
+                        {"frequency_hz", std::numeric_limits<double>::quiet_NaN()},
+                        {"sample_rate", 2e6},
+                    }),
+                    std::invalid_argument);
+
+    auto meta = src.report_metadata();
+    REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.2, 1e-9));
+    REQUIRE_THAT(meta.sample_rate, WithinAbs(1e6, 1e-9));
+
+    src.prepare();
+    std::vector<std::complex<float>> buf(2);
+    REQUIRE(src.render_block(buf.data(), buf.size()) == 2);
+    REQUIRE_THAT(buf[1].real(), WithinAbs(0.2 * std::cos(2.0 * M_PI * 100e3 / 1e6), 1e-6));
+}
+
 TEST_CASE("Source lifecycle: render after duration exhausted returns 0", "[dsp][lifecycle]") {
     CwSource src;
     src.configure({{"amplitude", 0.2}, {"frequency_rate", 1e6}, {"sample_rate", 1e6}, {"duration_sec", 0.001}});
@@ -68,6 +90,24 @@ TEST_CASE("Source lifecycle: metadata available after configure", "[dsp][lifecyc
     auto meta = src.report_metadata();
     REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.5, 1e-9));
     REQUIRE_THAT(meta.sample_rate, WithinAbs(1e6, 1e-9));
+}
+
+TEST_CASE("Chirp source keeps prior configuration after invalid reconfigure", "[dsp][lifecycle]") {
+    ChirpSource src;
+    src.configure({{"amplitude", 0.5}, {"f0_hz", -100e3}, {"f1_hz", 100e3}, {"sample_rate", 1e6}});
+
+    CHECK_THROWS_AS(src.configure({
+                        {"amplitude", 0.8},
+                        {"f0_hz", 0.0},
+                        {"f1_hz", std::numeric_limits<double>::infinity()},
+                        {"sample_rate", 2e6},
+                    }),
+                    std::invalid_argument);
+
+    auto meta = src.report_metadata();
+    REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.5, 1e-9));
+    REQUIRE_THAT(meta.sample_rate, WithinAbs(1e6, 1e-9));
+    REQUIRE_THAT(meta.nominal_bandwidth, WithinAbs(200e3, 1e-9));
 }
 
 TEST_CASE("Source lifecycle: noise source repeats indefinitely", "[dsp][lifecycle]") {

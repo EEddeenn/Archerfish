@@ -60,6 +60,7 @@
         "properties": {
           "target_device": {
             "type": "string",
+            "minLength": 1,
             "description": "Target device ID"
           },
           "time_sec": {
@@ -70,7 +71,7 @@
           "type": {
             "type": "string",
             "description": "Event type",
-            "enum": ["retune", "gain_change", "marker", "burst", "waveform_switch", "impairment_change"]
+            "enum": ["retune", "gain_change", "marker", "waveform_switch", "impairment_change"]
           },
           "payload": {
             "type": "object",
@@ -119,8 +120,8 @@
         "required": ["id", "channels", "mode"],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "description": "Sync group identifier" },
-          "channels": { "type": "array", "items": { "type": "string" }, "description": "Channel IDs in this group" },
+          "id": { "type": "string", "minLength": 1, "description": "Sync group identifier" },
+          "channels": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Channel IDs in this group" },
           "mode": { "type": "string", "enum": ["coherent", "independent"], "description": "Synchronization mode" }
         }
       }
@@ -195,10 +196,10 @@
     "waveform": {
       "type": "object",
       "description": "A waveform definition (inline or top-level reusable)",
-      "required": ["type"],
       "properties": {
         "id": {
           "type": "string",
+          "minLength": 1,
           "description": "Unique waveform identifier (required for top-level waveforms)"
         },
         "type": {
@@ -225,6 +226,10 @@
             "pm",
             "ofdm"
           ]
+        },
+        "target_power_dbm": {
+          "type": "number",
+          "description": "Optional target output power in dBm for calibrated amplitude selection"
         }
       },
       "required": ["type"],
@@ -385,6 +390,7 @@
         },
         "waveform_ref": {
           "type": "string",
+          "minLength": 1,
           "description": "Reference to a top-level waveform by ID"
         },
         "impairments": {
@@ -400,21 +406,40 @@
         "repeat": {
           "type": "object",
           "description": "Burst repeat specification",
+          "additionalProperties": false,
           "properties": {
             "count": {
               "type": "integer",
               "description": "Number of repetitions",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 1024
             },
             "interval_sec": {
               "type": "number",
               "description": "Time between burst starts in seconds",
-              "exclusiveMinimum": 0
+              "minimum": 0
             }
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": ["count"],
+                "properties": {
+                  "count": { "minimum": 2 }
+                }
+              },
+              "then": {
+                "required": ["interval_sec"],
+                "properties": {
+                  "interval_sec": { "exclusiveMinimum": 0 }
+                }
+              }
+            }
+          ]
         },
         "channel_id": {
           "type": "string",
+          "minLength": 1,
           "description": "Reference to explicit channel definition by ID"
         }
       }

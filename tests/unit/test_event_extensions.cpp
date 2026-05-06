@@ -154,6 +154,21 @@ TEST_CASE("waveform_switch missing new_waveform produces error", "[validator][ev
     CHECK(has_error_with_code(result, "V019_WAVEFORM_SWITCH_MISSING_WAVEFORM"));
 }
 
+TEST_CASE("waveform_switch rejects non-string payload fields", "[validator][event_extensions]") {
+    auto s = make_base_scenario();
+    ScenarioEvent evt;
+    evt.target_device = "usrp0";
+    evt.time_sec = 0.5;
+    evt.type = "waveform_switch";
+    evt.payload = nlohmann::json{{"emitter_id", 42}, {"new_waveform", false}};
+    s.events.push_back(evt);
+
+    auto result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error_with_code(result, "V019_WAVEFORM_SWITCH_INVALID_EMITTER"));
+    CHECK(has_error_with_code(result, "V019_WAVEFORM_SWITCH_INVALID_WAVEFORM"));
+}
+
 TEST_CASE("impairment_change missing emitter_id produces error", "[validator][event_extensions]") {
     auto s = make_base_scenario();
     ScenarioEvent evt;
@@ -180,6 +195,22 @@ TEST_CASE("impairment_change missing impairment name produces error", "[validato
     auto result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V020_IMPAIRMENT_CHANGE_MISSING_IMPAIRMENT"));
+}
+
+TEST_CASE("impairment_change rejects invalid payload field types", "[validator][event_extensions]") {
+    auto s = make_base_scenario();
+    ScenarioEvent evt;
+    evt.target_device = "usrp0";
+    evt.time_sec = 0.3;
+    evt.type = "impairment_change";
+    evt.payload = nlohmann::json{{"emitter_id", 42}, {"impairment", false}, {"enabled", "yes"}};
+    s.events.push_back(evt);
+
+    auto result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error_with_code(result, "V020_IMPAIRMENT_CHANGE_INVALID_EMITTER"));
+    CHECK(has_error_with_code(result, "V020_IMPAIRMENT_CHANGE_INVALID_IMPAIRMENT"));
+    CHECK(has_error_with_code(result, "V020_IMPAIRMENT_CHANGE_INVALID_ENABLED"));
 }
 
 // ========================================================================

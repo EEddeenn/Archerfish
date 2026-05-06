@@ -81,12 +81,16 @@ private:
         std::unique_ptr<TxWorker> tx_worker;
         std::unique_ptr<RenderWorker> render_worker;
         ChannelMetrics metrics;
+        bool failed{false};
     };
 
     static std::vector<uint32_t> get_active_channels(const scenario::Plan& plan);
-    bool run_single_channel();
-    bool run_replay();
+    bool run_single_channel(uint32_t channel);
+    bool run_replay(uint32_t channel);
     bool run_multi_channel(const std::vector<uint32_t>& channels);
+    void schedule_timeline_event(EventDispatcher& dispatcher,
+                                 const scenario::TimelineEvent& event,
+                                 uint32_t default_channel);
     void execute_channel_jobs(ChannelExecutor& exec, std::stop_token stoken);
 
     std::shared_ptr<hal::IHalDevice> device_;

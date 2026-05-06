@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/impairments/amplitude_ripple.hpp"
@@ -84,6 +85,17 @@ TEST_CASE("AmplitudeRipple phase continuity across calls", "[impairments][amplit
 TEST_CASE("AmplitudeRipple name", "[impairments][amplitude_ripple]") {
     archerfish::impairments::AmplitudeRippleImpairment ripple;
     REQUIRE(ripple.name() == "amplitude_ripple");
+}
+
+TEST_CASE("AmplitudeRipple rejects invalid parameters", "[impairments][amplitude_ripple]") {
+    REQUIRE_THROWS_AS(archerfish::impairments::AmplitudeRippleImpairment(0.1, 100.0, 0.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(archerfish::impairments::AmplitudeRippleImpairment(
+                          std::numeric_limits<double>::quiet_NaN(), 100.0, 1e6),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(archerfish::impairments::AmplitudeRippleImpairment(
+                          0.1, std::numeric_limits<double>::infinity(), 1e6),
+                      std::invalid_argument);
 }
 
 TEST_CASE("Delay zero delay preserves data", "[impairments][delay]") {
@@ -169,6 +181,16 @@ TEST_CASE("Delay disable preserves data", "[impairments][delay]") {
     REQUIRE(data[0] == original[0]);
 }
 
+TEST_CASE("Delay rejects invalid parameters before allocating", "[impairments][delay]") {
+    REQUIRE_THROWS_AS(archerfish::impairments::DelayImpairment(-0.001, 1e6),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(archerfish::impairments::DelayImpairment(0.001, 0.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(archerfish::impairments::DelayImpairment(
+                          std::numeric_limits<double>::infinity(), 1e6),
+                      std::invalid_argument);
+}
+
 TEST_CASE("BurstDropout zero rate preserves data", "[impairments][burst_dropout]") {
     archerfish::impairments::BurstDropoutImpairment burst(0.0, 10.0, 42);
     std::vector<std::complex<float>> data(1000, {1.0f, 0.0f});
@@ -248,4 +270,16 @@ TEST_CASE("BurstDropout signal resumes after burst", "[impairments][burst_dropou
 TEST_CASE("BurstDropout name", "[impairments][burst_dropout]") {
     archerfish::impairments::BurstDropoutImpairment burst;
     REQUIRE(burst.name() == "burst_dropout");
+}
+
+TEST_CASE("BurstDropout rejects invalid distribution parameters", "[impairments][burst_dropout]") {
+    REQUIRE_THROWS_AS(archerfish::impairments::BurstDropoutImpairment(-0.1, 10.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(archerfish::impairments::BurstDropoutImpairment(1.1, 10.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(archerfish::impairments::BurstDropoutImpairment(0.5, 0.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(archerfish::impairments::BurstDropoutImpairment(
+                          std::numeric_limits<double>::quiet_NaN(), 10.0),
+                      std::invalid_argument);
 }

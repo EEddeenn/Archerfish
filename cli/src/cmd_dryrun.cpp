@@ -20,40 +20,55 @@ namespace archerfish::cli {
 
 namespace {
 
+double optional_number_param(const nlohmann::json& params, const char* key, double fallback) {
+    if (!params.contains(key) || !params.at(key).is_number()) {
+        return fallback;
+    }
+    const double value = params.at(key).get<double>();
+    return std::isfinite(value) ? value : fallback;
+}
+
+std::string optional_string_param(const nlohmann::json& params, const char* key, std::string fallback) {
+    if (!params.contains(key) || !params.at(key).is_string()) {
+        return fallback;
+    }
+    return params.at(key).get<std::string>();
+}
+
 std::string waveform_label(const scenario::WaveformDef& wf) {
     const auto& p = wf.params;
     using dsp::WaveformType;
     if (wf.type == WaveformType::CW) {
-        double amp = p.value("amplitude", 0.0);
+        double amp = optional_number_param(p, "amplitude", 0.0);
         return fmt::format("CW A={}", amp);
     }
     if (wf.type == WaveformType::Chirp) {
-        double f0 = p.value("f0_hz", 0.0);
-        double f1 = p.value("f1_hz", 0.0);
-        double amp = p.value("amplitude", 0.0);
-        return fmt::format("Chirp f0={}→{} A={}", format_freq(f0), format_freq(f1), amp);
+        double f0 = optional_number_param(p, "f0_hz", 0.0);
+        double f1 = optional_number_param(p, "f1_hz", 0.0);
+        double amp = optional_number_param(p, "amplitude", 0.0);
+        return fmt::format("Chirp f0={} -> {} A={}", format_freq(f0), format_freq(f1), amp);
     }
     if (wf.type == WaveformType::Pulse) {
-        double freq = p.value("frequency_hz", 0.0);
-        double pw = p.value("pulse_width_sec", 0.0);
-        double pri = p.value("pri_sec", 0.0);
+        double freq = optional_number_param(p, "frequency_hz", 0.0);
+        double pw = optional_number_param(p, "pulse_width_sec", 0.0);
+        double pri = optional_number_param(p, "pri_sec", 0.0);
         return fmt::format("Pulse f={} PW={} PRI={}",
                            format_freq(freq), format_time(pw), format_time(pri));
     }
     if (wf.type == WaveformType::Noise) {
-        double amp = p.value("amplitude", 0.0);
+        double amp = optional_number_param(p, "amplitude", 0.0);
         return fmt::format("Noise A={}", amp);
     }
     if (wf.type == WaveformType::QPSK || wf.type == WaveformType::BPSK || wf.type == WaveformType::PSK8) {
-        double sr = p.value("symbol_rate", 0.0);
-        double amp = p.value("amplitude", 0.0);
+        double sr = optional_number_param(p, "symbol_rate", 0.0);
+        double amp = optional_number_param(p, "amplitude", 0.0);
         std::string type_upper = dsp::to_string(wf.type);
         std::transform(type_upper.begin(), type_upper.end(), type_upper.begin(), ::toupper);
         return fmt::format("{} {} A={}", type_upper, format_rate(sr), amp);
     }
     if (wf.type == WaveformType::QAM16 || wf.type == WaveformType::QAM64) {
-        double sr = p.value("symbol_rate", 0.0);
-        double amp = p.value("amplitude", 0.0);
+        double sr = optional_number_param(p, "symbol_rate", 0.0);
+        double amp = optional_number_param(p, "amplitude", 0.0);
         std::string type_upper = dsp::to_string(wf.type);
         std::transform(type_upper.begin(), type_upper.end(), type_upper.begin(), ::toupper);
         return fmt::format("{} {} A={}", type_upper, format_rate(sr), amp);
@@ -62,7 +77,7 @@ std::string waveform_label(const scenario::WaveformDef& wf) {
         return "MultiTone";
     }
     if (wf.type == WaveformType::File) {
-        return fmt::format("File({})", p.value("path", ""));
+        return fmt::format("File({})", optional_string_param(p, "path", ""));
     }
     return dsp::to_string(wf.type);
 }
@@ -78,9 +93,7 @@ struct TimelineEntry {
 
 std::string generate_timeline(const scenario::Plan& plan, const scenario::Scenario& scenario) {
     std::ostringstream out;
-
-    const std::string hline(65, '\xE2');
-    const std::string hline_thick(65, '\xE2');
+    const std::string separator(65, '-');
 
     out << fmt::format("Scenario: \"{}\" | {} device{} | {} emitter{} | Duration: {:.1f}s\n",
                        scenario.metadata.name,
@@ -89,7 +102,7 @@ std::string generate_timeline(const scenario::Plan& plan, const scenario::Scenar
                        scenario.emitters.size(),
                        scenario.emitters.size() != 1 ? "s" : "",
                        plan.estimated_duration_sec);
-    out << std::string(65, '\xE2') << "\n";
+    out << separator << "\n";
 
     std::map<std::string, std::vector<TimelineEntry>> device_entries;
     std::map<std::string, const scenario::DeviceDef*> device_defs;
@@ -143,11 +156,11 @@ std::string generate_timeline(const scenario::Plan& plan, const scenario::Scenar
             const auto& e = entries[i];
             bool is_last = (i == entries.size() - 1);
 
-            std::string branch_start = is_last ? "\xE2\x94\x94" : "\xE2\x94\x9C";
-            std::string branch_cont = is_last ? " " : "\xE2\x94\x82";
+            std::string branch_start = is_last ? "`-" : "|-";
+            std::string branch_cont = is_last ? " " : "|";
 
-            out << fmt::format("  {}{} {} [{:.3f}s \u2500\u2500\u2500 {:.3f}s] {}\n",
-                               branch_start, "\xE2\x94\x80",
+            out << fmt::format("  {}- {} [{:.3f}s --- {:.3f}s] {}\n",
+                               branch_start,
                                e.emitter_id, e.start, e.stop,
                                waveform_label(e.waveform));
 
@@ -157,11 +170,11 @@ std::string generate_timeline(const scenario::Plan& plan, const scenario::Scenar
                                branch_cont, format_time(e.stop), e.emitter_id);
         }
 
-        out << std::string(65, '\xE2') << "\n";
+        out << separator << "\n";
     }
 
     if (plan.estimated_duration_sec > 0) {
-        out << std::string(65, '\xE2') << "\n";
+        out << separator << "\n";
 
         double total = plan.estimated_duration_sec;
         int num_ticks = 6;
@@ -172,7 +185,7 @@ std::string generate_timeline(const scenario::Plan& plan, const scenario::Scenar
 
         out << fmt::format("Timeline: {:.1f}s ", 0.0);
         for (int i = 0; i < num_ticks; ++i) {
-            out << "\xE2\x95\x90\xE2\x95\x90\xE2\x95\x90\xE2\x95\xA4";
+            out << "---+";
         }
         out << fmt::format(" {:.1f}s\n", total);
 
@@ -185,7 +198,7 @@ std::string generate_timeline(const scenario::Plan& plan, const scenario::Scenar
 
     const auto& est = plan.resource_estimate;
     if (est.estimated_cpu_load > 0.0 || !est.timing_feasible || !est.warnings.empty()) {
-        out << std::string(65, '\xE2') << "\n";
+        out << separator << "\n";
         out << "Resource Estimates:\n";
         out << fmt::format("  CPU load:        {:.1f}%\n", est.estimated_cpu_load * 100.0);
         out << fmt::format("  Peak memory:     {} bytes\n", est.peak_memory_bytes);
@@ -197,7 +210,7 @@ std::string generate_timeline(const scenario::Plan& plan, const scenario::Scenar
     }
 
     if (!plan.mix_groups.empty()) {
-        out << std::string(65, '\xE2') << "\n";
+        out << separator << "\n";
         out << fmt::format("Mix Groups: {}\n", plan.mix_groups.size());
         for (const auto& mg : plan.mix_groups) {
             std::string emitter_list;
@@ -222,7 +235,7 @@ int cmd_dryrun(const CliOptions& opts, const std::string& file_path) {
     if (!result.has_value()) {
         fmt::print(stderr, "Pipeline errors:\n");
         for (const auto& e : result.error()) {
-            fmt::print(stderr, "  [{}] {} \xE2\x80\x94 {}\n",
+            fmt::print(stderr, "  [{}] {} - {}\n",
                        common::category_to_string(e.category), e.code, e.message);
         }
         return static_cast<int>(ExitCode::InputValidationFailure);

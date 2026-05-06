@@ -4,14 +4,20 @@
 #include <complex>
 #include <cstddef>
 
+#include "validation.hpp"
+
 namespace archerfish::impairments {
 
 IqImbalanceImpairment::IqImbalanceImpairment(double gain_imbalance_db,
                                              double phase_imbalance_rad)
     : gain_imbalance_db_(gain_imbalance_db),
-      phase_imbalance_rad_(phase_imbalance_rad) {}
+      phase_imbalance_rad_(phase_imbalance_rad) {
+    detail::require_finite(gain_imbalance_db_, "IQ gain imbalance");
+    detail::require_finite(phase_imbalance_rad_, "IQ phase imbalance");
+}
 
 void IqImbalanceImpairment::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "IqImbalanceImpairment");
     if (!enabled_) {
         return;
     }

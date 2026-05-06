@@ -4,6 +4,8 @@
 #include <complex>
 #include <stdexcept>
 
+#include "validation.hpp"
+
 namespace archerfish::impairments {
 
 PaNonlinearityImpairment::PaNonlinearityImpairment(const std::string& model,
@@ -17,6 +19,9 @@ PaNonlinearityImpairment::PaNonlinearityImpairment(const std::string& model,
     if (model_ != "rapp" && model_ != "saleh") {
         throw std::invalid_argument("PA nonlinearity model must be 'rapp' or 'saleh'");
     }
+    detail::require_positive_finite(saturation_, "PA saturation");
+    detail::require_positive_finite(smoothness_, "PA smoothness");
+    detail::require_finite(phase_shift_, "PA phase shift");
     if (saturation_ <= 0.0) {
         throw std::invalid_argument("PA saturation must be positive");
     }
@@ -50,6 +55,7 @@ double PaNonlinearityImpairment::saleh_am_pm(double input_amplitude) const {
 }
 
 void PaNonlinearityImpairment::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "PaNonlinearityImpairment");
     if (!enabled_) return;
 
     for (size_t i = 0; i < count; ++i) {

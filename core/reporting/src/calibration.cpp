@@ -1,9 +1,12 @@
 #include "archerfish/reporting/calibration.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <string>
+#include <string_view>
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
@@ -22,14 +25,35 @@ nlohmann::json point_to_json(const CalibrationPoint& p) {
     };
 }
 
-CalibrationPoint point_from_json(const nlohmann::json& j) {
-    CalibrationPoint p;
-    p.freq_hz = j.at("freq_hz").get<double>();
-    p.gain_db = j.at("gain_db").get<double>();
-    p.measured_power_dbm = j.at("measured_power_dbm").get<double>();
-    p.expected_power_dbm = j.at("expected_power_dbm").get<double>();
-    p.error_db = j.at("error_db").get<double>();
-    return p;
+std::string sanitize_calibration_filename_component(const std::string& value) {
+    std::string sanitized;
+    sanitized.reserve(value.size());
+    for (unsigned char ch : value) {
+        if (ch == '/' || ch == '\\' || std::iscntrl(ch) != 0) {
+            sanitized.push_back('_');
+        } else {
+            sanitized.push_back(static_cast<char>(ch));
+        }
+    }
+    return sanitized;
+}
+
+bool is_blank(std::string_view value) {
+    return std::all_of(value.begin(), value.end(), [](unsigned char ch) {
+        return std::isspace(ch) != 0;
+    });
+}
+
+std::expected<double, std::string> get_finite_double(const nlohmann::json& j,
+                                                     const char* key) {
+    if (!j.contains(key) || !j.at(key).is_number()) {
+        return std::unexpected(std::string("CalibrationPoint missing or invalid '") + key + "'");
+    }
+    const double value = j.at(key).get<double>();
+    if (!std::isfinite(value)) {
+        return std::unexpected(std::string("CalibrationPoint '") + key + "' must be finite");
+    }
+    return value;
 }
 
 } // namespace
@@ -66,16 +90,38 @@ std::expected<CalibrationData, std::string> CalibrationData::from_json(const std
 
     CalibrationData data;
     data.device_id = j["device_id"].get<std::string>();
-    data.channel = j["channel"].get<uint32_t>();
+    if (data.device_id.empty() || is_blank(data.device_id)) {
+        return std::unexpected("'device_id' must not be blank");
+    }
+    const auto channel_value = j["channel"].get<uint64_t>();
+    if (channel_value > std::numeric_limits<uint32_t>::max()) {
+        return std::unexpected("'channel' is out of range");
+    }
+    data.channel = static_cast<uint32_t>(channel_value);
     data.timestamp = j["timestamp"].get<std::string>();
+    if (data.timestamp.empty() || is_blank(data.timestamp)) {
+        return std::unexpected("'timestamp' must not be blank");
+    }
 
     for (const auto& item : j["entries"]) {
-        if (!item.contains("freq_hz") || !item.contains("gain_db") ||
-            !item.contains("measured_power_dbm") || !item.contains("expected_power_dbm") ||
-            !item.contains("error_db")) {
-            return std::unexpected("CalibrationPoint missing required fields");
+        if (!item.is_object()) {
+            return std::unexpected("CalibrationPoint must be an object");
         }
-        data.entries.push_back(point_from_json(item));
+
+        auto freq = get_finite_double(item, "freq_hz");
+        auto gain = get_finite_double(item, "gain_db");
+        auto measured = get_finite_double(item, "measured_power_dbm");
+        auto expected = get_finite_double(item, "expected_power_dbm");
+        auto error = get_finite_double(item, "error_db");
+        if (!freq.has_value()) return std::unexpected(freq.error());
+        if (!gain.has_value()) return std::unexpected(gain.error());
+        if (!measured.has_value()) return std::unexpected(measured.error());
+        if (!expected.has_value()) return std::unexpected(expected.error());
+        if (!error.has_value()) return std::unexpected(error.error());
+        if (*freq <= 0.0) {
+            return std::unexpected("CalibrationPoint 'freq_hz' must be > 0");
+        }
+        data.entries.push_back({*freq, *gain, *measured, *expected, *error});
     }
 
     return data;
@@ -87,13 +133,25 @@ std::filesystem::path CalibrationData::calibration_dir() {
 }
 
 std::filesystem::path CalibrationData::calibration_file(const std::string& dev_id, uint32_t ch) {
-    return calibration_dir() / fmt::format("{}_ch{}.json", dev_id, ch);
+    return calibration_dir() / fmt::format("{}_ch{}.json", sanitize_calibration_filename_component(dev_id), ch);
 }
 
 std::optional<InterpolationResult> CalibrationData::interpolate_power(double freq_hz, double gain_db) const {
     if (entries.empty()) return std::nullopt;
+    if (!std::isfinite(freq_hz) || freq_hz <= 0.0 || !std::isfinite(gain_db)) {
+        return std::nullopt;
+    }
+
+    auto valid_point = [](const CalibrationPoint& p) {
+        return std::isfinite(p.freq_hz) && p.freq_hz > 0.0 &&
+               std::isfinite(p.gain_db) &&
+               std::isfinite(p.measured_power_dbm) &&
+               std::isfinite(p.expected_power_dbm) &&
+               std::isfinite(p.error_db);
+    };
 
     if (entries.size() == 1) {
+        if (!valid_point(entries[0])) return std::nullopt;
         InterpolationResult r;
         r.estimated_power_dbm = entries[0].measured_power_dbm;
         r.method = "nearest_neighbor";
@@ -102,15 +160,19 @@ std::optional<InterpolationResult> CalibrationData::interpolate_power(double fre
 
     double min_dist = std::numeric_limits<double>::max();
     size_t nearest_idx = 0;
+    bool found_valid = false;
     for (size_t i = 0; i < entries.size(); ++i) {
+        if (!valid_point(entries[i])) continue;
         double df = (entries[i].freq_hz - freq_hz) / 1e9;
         double dg = entries[i].gain_db - gain_db;
         double dist = df * df + dg * dg;
         if (dist < min_dist) {
             min_dist = dist;
             nearest_idx = i;
+            found_valid = true;
         }
     }
+    if (!found_valid) return std::nullopt;
 
     InterpolationResult result;
     result.method = "nearest_neighbor";
@@ -127,6 +189,7 @@ std::optional<InterpolationResult> CalibrationData::interpolate_power(double fre
         double best_q11 = std::numeric_limits<double>::max();
 
         for (const auto& e : entries) {
+            if (!valid_point(e)) continue;
             if (e.freq_hz <= freq_hz && e.gain_db <= gain_db) {
                 double df = (freq_hz - e.freq_hz) / 1e9;
                 double dg = gain_db - e.gain_db;
@@ -195,12 +258,16 @@ std::optional<InterpolationResult> CalibrationData::interpolate_power(double fre
 }
 
 double CalibrationData::compute_required_amplitude(double target_power_dbm, double freq_hz, double gain_db) const {
+    if (!std::isfinite(target_power_dbm)) return -1.0;
     auto interp = interpolate_power(freq_hz, gain_db);
     if (!interp.has_value()) return -1.0;
 
     double current_power = interp->estimated_power_dbm;
     double power_diff_db = target_power_dbm - current_power;
     double amplitude_ratio = std::pow(10.0, power_diff_db / 20.0);
+    if (!std::isfinite(amplitude_ratio) || amplitude_ratio < 0.0) {
+        return -1.0;
+    }
     return std::min(amplitude_ratio, 1.0);
 }
 

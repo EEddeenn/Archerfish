@@ -4,6 +4,8 @@
 #include "archerfish/common/rf_types.hpp"
 #include "archerfish/scenario/scenario.hpp"
 
+#include <limits>
+
 using namespace archerfish::common;
 using namespace archerfish::scenario;
 using Catch::Matchers::WithinAbs;
@@ -68,6 +70,21 @@ TEST_CASE("RfSettings validation: bandwidth must be positive", "[common][rf]") {
     CHECK(errors[0].code == "E_RF_INVALID_BW");
 }
 
+TEST_CASE("RfSettings validation rejects non-finite values", "[common][rf]") {
+    RfSettings cfg;
+    cfg.freq_hz = std::numeric_limits<double>::quiet_NaN();
+    cfg.rate_sps = std::numeric_limits<double>::infinity();
+    cfg.gain_db = std::numeric_limits<double>::quiet_NaN();
+    cfg.bandwidth_hz = std::numeric_limits<double>::infinity();
+
+    auto errors = cfg.validate();
+    REQUIRE(errors.size() == 4);
+    CHECK(errors[0].code == "E_RF_INVALID_FREQ");
+    CHECK(errors[1].code == "E_RF_INVALID_RATE");
+    CHECK(errors[2].code == "E_RF_INVALID_GAIN");
+    CHECK(errors[3].code == "E_RF_INVALID_BW");
+}
+
 TEST_CASE("TimeSpec default construction", "[common][rf]") {
     TimeSpec ts;
     CHECK(ts.seconds == 0);
@@ -89,6 +106,21 @@ TEST_CASE("TimeSpec from_seconds zero", "[common][rf]") {
     TimeSpec ts = TimeSpec::from_seconds(0.0);
     CHECK(ts.seconds == 0);
     CHECK_THAT(ts.fractional_ns, WithinAbs(0.0, 1e-6));
+}
+
+TEST_CASE("TimeSpec from_seconds normalizes negative fractions", "[common][rf]") {
+    TimeSpec ts = TimeSpec::from_seconds(-0.25);
+    CHECK(ts.seconds == -1);
+    CHECK_THAT(ts.fractional_ns, WithinAbs(750000000.0, 1e-6));
+    CHECK_THAT(ts.to_seconds(), WithinAbs(-0.25, 1e-12));
+}
+
+TEST_CASE("TimeSpec from_seconds rejects invalid input", "[common][rf]") {
+    CHECK_THROWS_AS(TimeSpec::from_seconds(std::numeric_limits<double>::quiet_NaN()), std::invalid_argument);
+    CHECK_THROWS_AS(TimeSpec::from_seconds(std::numeric_limits<double>::infinity()), std::invalid_argument);
+    CHECK_THROWS_AS(TimeSpec::from_seconds(std::numeric_limits<double>::max()), std::out_of_range);
+    CHECK_THROWS_AS(TimeSpec::from_seconds(static_cast<double>(std::numeric_limits<int64_t>::max())),
+                    std::out_of_range);
 }
 
 TEST_CASE("TimeSpec comparison operators", "[common][rf]") {

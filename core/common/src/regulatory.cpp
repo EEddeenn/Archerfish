@@ -1,6 +1,7 @@
 #include "archerfish/common/regulatory.hpp"
 
 #include <cmath>
+#include <limits>
 #include <fmt/format.h>
 
 namespace archerfish::common {
@@ -16,12 +17,36 @@ std::vector<RestrictedBand> get_default_restricted_bands() {
 
 common::ErrorList check_regulatory(double freq_hz, double bandwidth_hz) {
     common::ErrorList warnings;
-    if (bandwidth_hz < 0.0) bandwidth_hz = 0.0;
+    if (!std::isfinite(freq_hz) || freq_hz <= 0.0) {
+        warnings.push_back({common::ErrorCategory::Validation,
+                            "V_REGULATORY_INVALID_FREQUENCY",
+                            "Regulatory check frequency must be finite and > 0"});
+        return warnings;
+    }
+    if (!std::isfinite(bandwidth_hz) || bandwidth_hz < 0.0) {
+        warnings.push_back({common::ErrorCategory::Validation,
+                            "V_REGULATORY_INVALID_BANDWIDTH",
+                            "Regulatory check bandwidth must be finite and >= 0"});
+        return warnings;
+    }
     auto bands = get_default_restricted_bands();
     double half_bw = bandwidth_hz / 2.0;
+    if (!std::isfinite(half_bw) ||
+        half_bw > std::numeric_limits<double>::max() - freq_hz) {
+        warnings.push_back({common::ErrorCategory::Validation,
+                            "V_REGULATORY_INVALID_BANDWIDTH",
+                            "Regulatory check bandwidth is too large for frequency"});
+        return warnings;
+    }
+    const double signal_low = freq_hz - half_bw;
+    const double signal_high = freq_hz + half_bw;
 
     for (const auto& band : bands) {
-        bool overlap = freq_hz + half_bw >= band.low_hz && freq_hz - half_bw <= band.high_hz;
+        if (!std::isfinite(band.low_hz) || !std::isfinite(band.high_hz) ||
+            band.low_hz > band.high_hz) {
+            continue;
+        }
+        bool overlap = signal_high >= band.low_hz && signal_low <= band.high_hz;
         if (overlap) {
             warnings.push_back({
                 common::ErrorCategory::QualityWarning,

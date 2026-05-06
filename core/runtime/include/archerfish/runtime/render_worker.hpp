@@ -29,12 +29,14 @@ class RenderWorker {
 public:
     RenderWorker(SampleQueue& output_queue, const RenderJob& job,
                  std::stop_source stop_src = std::stop_source());
+    ~RenderWorker();
 
     void start();
     void join();
     void request_stop();
 
     [[nodiscard]] bool is_complete() const;
+    [[nodiscard]] bool has_failed() const;
     [[nodiscard]] size_t samples_rendered() const;
 
     /// Pre-render entire waveform into a buffer (for replay mode).
@@ -50,6 +52,7 @@ private:
     std::thread thread_;
     std::stop_source stop_source_;
     std::atomic<bool> complete_{false};
+    std::atomic<bool> failed_{false};
     std::atomic<size_t> samples_rendered_{0};
 };
 

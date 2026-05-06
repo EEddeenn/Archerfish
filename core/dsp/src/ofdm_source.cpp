@@ -3,9 +3,37 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstdint>
+#include <limits>
 #include <numbers>
+#include <stdexcept>
+#include <string>
 
 namespace archerfish::dsp {
+
+namespace {
+
+constexpr size_t kMaxFftSize = 65'536;
+
+size_t parse_size_param(const nlohmann::json& value, const char* name) {
+    if (!value.is_number_integer() && !value.is_number_unsigned()) {
+        throw std::invalid_argument(std::string(name) + " must be an integer");
+    }
+    if (value.is_number_integer()) {
+        const auto parsed = value.get<std::int64_t>();
+        if (parsed < 0) {
+            throw std::invalid_argument(std::string(name) + " must be non-negative");
+        }
+        return static_cast<size_t>(parsed);
+    }
+    const auto parsed = value.get<std::uint64_t>();
+    if (parsed > static_cast<std::uint64_t>(std::numeric_limits<size_t>::max())) {
+        throw std::out_of_range(std::string(name) + " exceeds size_t range");
+    }
+    return static_cast<size_t>(parsed);
+}
+
+} // namespace
 
 void OfdmSource::bit_reversal_permute(std::vector<std::complex<float>>& data) {
     auto n = data.size();
@@ -85,13 +113,37 @@ void OfdmSource::generate_ofdm_symbol() {
 }
 
 void OfdmSource::configure(const nlohmann::json& params) {
-    configure_common(params);
+    size_t next_fft_size = fft_size_;
+    size_t next_cyclic_prefix_size = cyclic_prefix_size_;
+    size_t next_active_subcarriers = active_subcarriers_;
+
     if (params.contains("fft_size"))
-        fft_size_ = params["fft_size"].get<size_t>();
+        next_fft_size = parse_size_param(params["fft_size"], "fft_size");
     if (params.contains("cyclic_prefix_size"))
-        cyclic_prefix_size_ = params["cyclic_prefix_size"].get<size_t>();
+        next_cyclic_prefix_size = parse_size_param(params["cyclic_prefix_size"], "cyclic_prefix_size");
     if (params.contains("active_subcarriers"))
-        active_subcarriers_ = params["active_subcarriers"].get<size_t>();
+        next_active_subcarriers = parse_size_param(params["active_subcarriers"], "active_subcarriers");
+
+    if (next_fft_size == 0 || (next_fft_size & (next_fft_size - 1)) != 0) {
+        throw std::invalid_argument("fft_size must be a non-zero power of two");
+    }
+    if (next_fft_size > kMaxFftSize) {
+        throw std::invalid_argument("fft_size exceeds maximum supported size");
+    }
+    if (next_cyclic_prefix_size >= next_fft_size) {
+        throw std::invalid_argument("cyclic_prefix_size must be smaller than fft_size");
+    }
+    if (next_active_subcarriers == 0 || next_active_subcarriers >= next_fft_size) {
+        throw std::invalid_argument("active_subcarriers must be in [1, fft_size)");
+    }
+
+    configure_common(params);
+    fft_size_ = next_fft_size;
+    cyclic_prefix_size_ = next_cyclic_prefix_size;
+    active_subcarriers_ = next_active_subcarriers;
+    rng_.seed(seed());
+    symbol_buffer_.clear();
+    output_offset_ = 0;
 }
 
 void OfdmSource::prepare() {
@@ -102,8 +154,11 @@ void OfdmSource::prepare() {
 }
 
 size_t OfdmSource::render_block(std::complex<float>* out, size_t max_samples) {
+    if (max_samples > 0 && out == nullptr) {
+        throw std::invalid_argument("OfdmSource render output buffer must not be null");
+    }
     if (duration_sec_.has_value()) {
-        size_t total_samples = static_cast<size_t>(std::round(duration_sec_.value() * sample_rate_));
+        size_t total_samples = checked_sample_count(sample_rate_, duration_sec_.value());
         if (samples_produced_ >= total_samples)
             return 0;
         max_samples = std::min(max_samples, total_samples - samples_produced_);

@@ -61,6 +61,46 @@ TEST_CASE("OFDM duration limit respected", "[dsp][ofdm][parameters]") {
     REQUIRE(n2 == 0);
 }
 
+TEST_CASE("OFDM rejects invalid dimensions", "[dsp][ofdm][parameters]") {
+    OfdmSource src;
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"fft_size", 63}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"fft_size", -64}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"fft_size", 64.5}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"fft_size", 131072}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"fft_size", 64}, {"cyclic_prefix_size", 64}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"fft_size", 64}, {"cyclic_prefix_size", -1}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"fft_size", 64}, {"active_subcarriers", 0}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"fft_size", 64}, {"active_subcarriers", 64}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"fft_size", 64}, {"active_subcarriers", -1}}), std::invalid_argument);
+}
+
+TEST_CASE("OFDM keeps prior configuration after invalid reconfigure", "[dsp][ofdm][parameters]") {
+    OfdmSource src;
+    src.configure({{"amplitude", 0.1}, {"sample_rate", 20e6},
+                   {"fft_size", 64}, {"cyclic_prefix_size", 16}, {"active_subcarriers", 60},
+                   {"seed", 42}});
+
+    CHECK_THROWS_AS(src.configure({{"amplitude", 0.8}, {"sample_rate", 40e6},
+                                   {"fft_size", 128}, {"cyclic_prefix_size", 32}, {"active_subcarriers", 128}}),
+                    std::invalid_argument);
+
+    auto meta = src.report_metadata();
+    REQUIRE_THAT(meta.sample_rate, WithinAbs(20e6, 1e-9));
+    REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.1, 1e-9));
+    REQUIRE_THAT(meta.nominal_bandwidth, WithinAbs(20e6, 1e-9));
+}
+
+TEST_CASE("OFDM render validates output buffer", "[dsp][ofdm][parameters]") {
+    OfdmSource src;
+    src.configure({{"amplitude", 0.1}, {"sample_rate", 20e6},
+                   {"fft_size", 64}, {"cyclic_prefix_size", 16}, {"active_subcarriers", 60},
+                   {"seed", 42}});
+    src.prepare();
+
+    CHECK(src.render_block(nullptr, 0) == 0);
+    CHECK_THROWS_AS(src.render_block(nullptr, 1), std::invalid_argument);
+}
+
 TEST_CASE("OFDM reset produces identical output", "[dsp][ofdm][parameters]") {
     OfdmSource src;
     src.configure({{"amplitude", 0.1}, {"sample_rate", 1e6},

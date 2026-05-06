@@ -74,6 +74,67 @@ TEST_CASE("RRC filter has correct number of taps", "[dsp][modulator]") {
     REQUIRE(taps.size() == 25);
 }
 
+TEST_CASE("Modulator rejects invalid modulation parameters", "[dsp][modulator]") {
+    ModulatorSource src;
+    CHECK_THROWS_AS(src.configure({{"modulation", 42}, {"sample_rate", 4e3}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"type", 42}, {"sample_rate", 4e3}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "bad"}, {"sample_rate", 4e3}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "BPSK"}, {"sample_rate", 4e3}, {"symbol_rate", "fast"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "BPSK"}, {"sample_rate", 4e3}, {"symbol_rate", 0.0}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "BPSK"}, {"sample_rate", 4e3}, {"samples_per_symbol", 0}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "BPSK"}, {"sample_rate", 4e3}, {"samples_per_symbol", -1}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "BPSK"}, {"sample_rate", 4e3}, {"samples_per_symbol", 1.5}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "BPSK"}, {"sample_rate", 4e3}, {"samples_per_symbol", 2048}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "BPSK"}, {"sample_rate", 4e3}, {"rrc_alpha", "wide"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "BPSK"}, {"sample_rate", 4e3}, {"rrc_alpha", 0.0}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"modulation", "BPSK"}, {"sample_rate", 4e3}, {"rrc_alpha", 1.1}}), std::invalid_argument);
+}
+
+TEST_CASE("Modulator keeps prior configuration after invalid reconfigure", "[dsp][modulator]") {
+    ModulatorSource src;
+    src.configure({{"modulation", "QPSK"}, {"symbol_rate", 1e3}, {"samples_per_symbol", 4},
+                   {"rrc_alpha", 0.25}, {"amplitude", 0.5}, {"sample_rate", 4e3}, {"seed", 42}});
+
+    CHECK_THROWS_AS(src.configure({{"modulation", "64QAM"}, {"symbol_rate", 2e3}, {"samples_per_symbol", 8},
+                                   {"rrc_alpha", 1.1}, {"amplitude", 0.9}, {"sample_rate", 8e3}}),
+                    std::invalid_argument);
+
+    auto meta = src.report_metadata();
+    REQUIRE_THAT(meta.sample_rate, WithinAbs(4e3, 1e-9));
+    REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.5, 1e-9));
+    REQUIRE_THAT(meta.nominal_bandwidth, WithinAbs(1250.0, 1e-9));
+}
+
+TEST_CASE("Modulator render validates output buffer and lifecycle", "[dsp][modulator]") {
+    ModulatorSource src;
+    src.configure({{"modulation", "BPSK"}, {"symbol_rate", 1e3}, {"samples_per_symbol", 4},
+                   {"amplitude", 1.0}, {"sample_rate", 4e3}, {"seed", 42}});
+
+    std::vector<std::complex<float>> buf(4);
+    CHECK_THROWS_AS(src.render_block(buf.data(), buf.size()), std::logic_error);
+
+    src.prepare();
+    CHECK(src.render_block(nullptr, 0) == 0);
+    CHECK_THROWS_AS(src.render_block(nullptr, 1), std::invalid_argument);
+}
+
+TEST_CASE("Modulator reconfigure invalidates prepared filter state", "[dsp][modulator]") {
+    ModulatorSource src;
+    src.configure({{"modulation", "BPSK"}, {"symbol_rate", 1e3}, {"samples_per_symbol", 4},
+                   {"amplitude", 1.0}, {"sample_rate", 4e3}, {"seed", 42}});
+    src.prepare();
+
+    std::vector<std::complex<float>> buf(8);
+    REQUIRE(src.render_block(buf.data(), buf.size()) == 8);
+
+    src.configure({{"modulation", "QPSK"}, {"symbol_rate", 1e3}, {"samples_per_symbol", 8},
+                   {"amplitude", 1.0}, {"sample_rate", 8e3}, {"seed", 42}});
+    CHECK_THROWS_AS(src.render_block(buf.data(), buf.size()), std::logic_error);
+
+    src.prepare();
+    REQUIRE(src.render_block(buf.data(), buf.size()) == 8);
+}
+
 TEST_CASE("Modulator output has expected sample count for duration", "[dsp][modulator]") {
     ModulatorSource src;
     double dur = 0.001;

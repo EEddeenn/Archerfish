@@ -2,6 +2,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <complex>
+#include <stdexcept>
 #include <vector>
 
 #include "archerfish/impairments/delay.hpp"
@@ -77,4 +78,12 @@ TEST_CASE("Delay multiple resets work correctly", "[impairments][delay][standalo
     std::vector<std::complex<float>> batch3 = {{30.0f, 0.0f}};
     delay.apply(batch3.data(), batch3.size());
     REQUIRE_THAT(batch3[0].real(), WithinAbs(20.0f, 1e-5f));
+}
+
+TEST_CASE("Delay validates buffer and bounded sample count", "[impairments][delay][standalone]") {
+    DelayImpairment delay(0.001, 1000.0);
+
+    REQUIRE_NOTHROW(delay.apply(nullptr, 0));
+    REQUIRE_THROWS_AS(delay.apply(nullptr, 1), std::invalid_argument);
+    REQUIRE_THROWS_AS(DelayImpairment(16'000'001.0, 1.0), std::invalid_argument);
 }

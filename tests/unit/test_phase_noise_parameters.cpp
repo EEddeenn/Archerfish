@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/impairments/phase_noise.hpp"
@@ -78,4 +79,13 @@ TEST_CASE("PhaseNoise different PSD shapes work", "[impairments][phase_noise][pa
 
     REQUIRE_NOTHROW(pn1.apply(data1.data(), data1.size()));
     REQUIRE_NOTHROW(pn2.apply(data2.data(), data2.size()));
+}
+
+TEST_CASE("PhaseNoise rejects invalid parameters", "[impairments][phase_noise][parameters]") {
+    REQUIRE_THROWS_AS(PhaseNoiseImpairment(-1.0, 0.1, 1e6), std::invalid_argument);
+    REQUIRE_THROWS_AS(PhaseNoiseImpairment(1.0, -0.1, 1e6), std::invalid_argument);
+    REQUIRE_THROWS_AS(PhaseNoiseImpairment(1.0, 0.1, 0.0), std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        PhaseNoiseImpairment(std::numeric_limits<double>::quiet_NaN(), 0.1, 1e6),
+        std::invalid_argument);
 }

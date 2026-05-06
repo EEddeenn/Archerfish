@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <stdexcept>
 #include <vector>
 
 #include "archerfish/dsp/pulse_source.hpp"
@@ -48,7 +49,7 @@ TEST_CASE("Pulse with wide PRI has long silence periods", "[dsp][pulse][patterns
 TEST_CASE("Pulse duration limit respected", "[dsp][pulse][patterns]") {
     PulseSource src;
     src.configure({{"amplitude", 0.5}, {"frequency_hz", 0.0},
-                   {"pulse_width_sec", 1e-6}, {"pri_sec", 10e-6},
+                   {"pulse_width_sec", 1e-3}, {"pri_sec", 10e-3},
                    {"sample_rate", 1000}, {"duration_sec", 0.01}});
     src.prepare();
 
@@ -58,6 +59,15 @@ TEST_CASE("Pulse duration limit respected", "[dsp][pulse][patterns]") {
 
     size_t n2 = src.render_block(buf.data(), buf.size());
     REQUIRE(n2 == 0);
+}
+
+TEST_CASE("Pulse rejects sub-sample pulse width", "[dsp][pulse][patterns]") {
+    PulseSource src;
+    src.configure({{"amplitude", 0.5}, {"frequency_hz", 0.0},
+                   {"pulse_width_sec", 1e-6}, {"pri_sec", 10e-6},
+                   {"sample_rate", 1000}, {"duration_sec", 0.01}});
+
+    REQUIRE_THROWS_AS(src.prepare(), std::invalid_argument);
 }
 
 TEST_CASE("Pulse reset restarts pattern", "[dsp][pulse][patterns]") {

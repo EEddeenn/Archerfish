@@ -16,12 +16,14 @@ struct TxMetrics {
     std::atomic<size_t> blocks_sent{0};
     std::atomic<size_t> underruns{0};
     std::atomic<bool> active{false};
+    std::atomic<bool> failed{false};
 };
 
 class TxWorker {
 public:
     TxWorker(SampleQueue& input_queue, hal::IHalDevice& device, uint32_t channel,
              std::stop_source stop_src = std::stop_source());
+    ~TxWorker();
 
     void start();
     void request_stop();

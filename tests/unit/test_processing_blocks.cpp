@@ -3,6 +3,8 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
 #include "archerfish/dsp/scaler.hpp"
@@ -34,6 +36,18 @@ TEST_CASE("Scaler complex rotation by exp(j*pi/4)", "[dsp][scaler]") {
     REQUIRE_THAT(buf[0].imag(), WithinAbs(sq2, 1e-6f));
 }
 
+TEST_CASE("Scaler rejects invalid buffers and factors", "[dsp][scaler]") {
+    std::vector<std::complex<float>> buf = {{1.0f, 0.0f}};
+
+    REQUIRE_NOTHROW(scale(nullptr, 0, 1.0f));
+    REQUIRE_THROWS_AS(scale(nullptr, 1, 1.0f), std::invalid_argument);
+    REQUIRE_THROWS_AS(scale(buf.data(), buf.size(), std::numeric_limits<float>::infinity()),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(scale(buf.data(), buf.size(),
+                            std::complex<float>{1.0f, std::numeric_limits<float>::quiet_NaN()}),
+                      std::invalid_argument);
+}
+
 TEST_CASE("Summer adds two constant buffers", "[dsp][summer]") {
     std::vector<std::complex<float>> a(5, {1.0f, 0.5f});
     std::vector<std::complex<float>> b(5, {0.5f, 1.0f});
@@ -58,4 +72,18 @@ TEST_CASE("Summer headroom warning when sum exceeds 1.0", "[dsp][summer]") {
     for (size_t i = 0; i < out.size(); ++i) {
         REQUIRE_THAT(out[i].real(), WithinAbs(1.6f, 1e-6f));
     }
+}
+
+TEST_CASE("Summer rejects null buffers for nonzero work", "[dsp][summer]") {
+    std::vector<std::complex<float>> a(1, {1.0f, 0.0f});
+    std::vector<std::complex<float>> b(1, {1.0f, 0.0f});
+    std::vector<std::complex<float>> out(1);
+
+    REQUIRE_NOTHROW(summer(nullptr, nullptr, nullptr, 0));
+    REQUIRE_NOTHROW(summer_with_headroom_check(nullptr, nullptr, nullptr, 0));
+    REQUIRE_THROWS_AS(summer(nullptr, b.data(), out.data(), 1), std::invalid_argument);
+    REQUIRE_THROWS_AS(summer(a.data(), nullptr, out.data(), 1), std::invalid_argument);
+    REQUIRE_THROWS_AS(summer(a.data(), b.data(), nullptr, 1), std::invalid_argument);
+    REQUIRE_THROWS_AS(summer_with_headroom_check(nullptr, b.data(), out.data(), 1),
+                      std::invalid_argument);
 }

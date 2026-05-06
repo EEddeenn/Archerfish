@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/impairments/fading.hpp"
@@ -99,4 +100,14 @@ TEST_CASE("Fading Rician very high K-factor approaches constant magnitude", "[fa
         max_deviation = std::max(max_deviation, dev);
     }
     REQUIRE(max_deviation < 2.0);
+}
+
+TEST_CASE("Fading rejects invalid parameters", "[fading][models]") {
+    REQUIRE_THROWS_AS(FadingImpairment(-1.0, 1e6, "rayleigh"), std::invalid_argument);
+    REQUIRE_THROWS_AS(FadingImpairment(1.0, 0.0, "rayleigh"), std::invalid_argument);
+    REQUIRE_THROWS_AS(FadingImpairment(1.0, 1e6, "unknown"), std::invalid_argument);
+    REQUIRE_THROWS_AS(FadingImpairment(1.0, 1e6, "rician", -1.0), std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        FadingImpairment(std::numeric_limits<double>::quiet_NaN(), 1e6, "rayleigh"),
+        std::invalid_argument);
 }

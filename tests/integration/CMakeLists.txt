@@ -31,7 +31,6 @@ add_executable(test_qpsk_impairments test_qpsk_impairments.cpp)
 target_compile_definitions(test_qpsk_impairments PRIVATE EXAMPLES_DIR="${CMAKE_SOURCE_DIR}/examples")
 target_link_libraries(test_qpsk_impairments
     PRIVATE
-        archerfish_dsp
         archerfish_impairments
         Catch2::Catch2WithMain
 )

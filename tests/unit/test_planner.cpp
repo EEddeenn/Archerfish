@@ -7,6 +7,9 @@ using archerfish::dsp::WaveformType;
 
 #include "archerfish/scenario/planner.hpp"
 
+#include <algorithm>
+#include <limits>
+
 using namespace archerfish::scenario;
 using namespace archerfish::common;
 using Catch::Matchers::WithinAbs;
@@ -42,7 +45,7 @@ Scenario make_multi_emitter_same_device_scenario() {
     em1.device = "usrp0";
     em1.channel = 0;
     em1.start_after_sec = 1.0;
-    em1.duration_sec = 3.0;
+    em1.duration_sec = 1.0;
     em1.waveform = WaveformDef{std::nullopt, WaveformType::CW, nlohmann::json{{"amplitude", 0.5}}};
     s.emitters.push_back(em1);
 
@@ -141,13 +144,13 @@ TEST_CASE("Multiple emitters on same device produce sorted timeline", "[planner]
     REQUIRE_THAT(p.timeline[0].time_sec, WithinAbs(1.0, 1e-12));
     REQUIRE(p.timeline[0].target_id == "cw1");
 
-    REQUIRE(p.timeline[1].type == TimelineEventType::EmitterStart);
+    REQUIRE(p.timeline[1].type == TimelineEventType::EmitterStop);
     REQUIRE_THAT(p.timeline[1].time_sec, WithinAbs(2.0, 1e-12));
-    REQUIRE(p.timeline[1].target_id == "cw2");
+    REQUIRE(p.timeline[1].target_id == "cw1");
 
-    REQUIRE(p.timeline[2].type == TimelineEventType::EmitterStop);
-    REQUIRE_THAT(p.timeline[2].time_sec, WithinAbs(4.0, 1e-12));
-    REQUIRE(p.timeline[2].target_id == "cw1");
+    REQUIRE(p.timeline[2].type == TimelineEventType::EmitterStart);
+    REQUIRE_THAT(p.timeline[2].time_sec, WithinAbs(2.0, 1e-12));
+    REQUIRE(p.timeline[2].target_id == "cw2");
 
     REQUIRE(p.timeline[3].type == TimelineEventType::EmitterStop);
     REQUIRE_THAT(p.timeline[3].time_sec, WithinAbs(6.0, 1e-12));
@@ -193,6 +196,34 @@ TEST_CASE("Duration sec preserved in render instructions", "[planner]") {
     REQUIRE_THAT(p.render_instructions[1].duration_sec, WithinAbs(3.0, 1e-12));
 }
 
+TEST_CASE("Planning rejects overlapping non-additive emitters on one channel", "[planner]") {
+    Scenario s;
+    s.metadata.name = "planner_overlap";
+    s.devices.push_back({"usrp0", 0, {2.45e9, 10e6, 20.0}});
+    s.emitters.push_back({"cw1", "usrp0", 0, 0.0, 2.0,
+                          WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.2}}},
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt, std::nullopt});
+    s.emitters.push_back({"cw2", "usrp0", 0, 1.0, 2.0,
+                          WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.3}}},
+                          std::nullopt, std::nullopt, MixingMode::None, std::nullopt, std::nullopt});
+
+    auto result = plan(s);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE_FALSE(result.error().empty());
+    CHECK(result.error()[0].code == "V002_OVERLAPPING_EMITTERS");
+}
+
+TEST_CASE("Planner rejects unrenderable sample counts", "[planner]") {
+    Scenario s = make_simple_scenario();
+    s.devices[0].rf.rate_sps = static_cast<double>(std::numeric_limits<size_t>::max());
+    s.emitters[0].duration_sec = 2.0;
+
+    auto result = plan(s);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE_FALSE(result.error().empty());
+    CHECK(result.error()[0].code == "E_PLAN_SAMPLE_COUNT_TOO_LARGE");
+}
+
 TEST_CASE("Start after sec values preserved in timeline", "[planner]") {
     auto result = plan(make_multi_device_scenario());
     REQUIRE(result.has_value());
@@ -213,6 +244,136 @@ TEST_CASE("Empty scenario (no emitters) should fail planning", "[planner]") {
     auto result = plan(s);
     REQUIRE_FALSE(result.has_value());
     REQUIRE_FALSE(result.error().empty());
+}
+
+TEST_CASE("Planning fails for unknown device instead of returning partial plan", "[planner]") {
+    auto s = make_simple_scenario();
+    s.emitters[0].device = "missing";
+
+    auto result = plan(s);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE_FALSE(result.error().empty());
+    CHECK(result.error()[0].code == "E_PLAN_UNKNOWN_DEVICE");
+}
+
+TEST_CASE("Planning fails for unresolved waveform ref instead of returning partial plan", "[planner]") {
+    auto s = make_simple_scenario();
+    s.emitters[0].waveform = std::nullopt;
+    s.emitters[0].waveform_ref = "missing_waveform";
+
+    auto result = plan(s);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE_FALSE(result.error().empty());
+    CHECK(result.error()[0].code == "E_PLAN_UNRESOLVED_WAVEFORM");
+}
+
+TEST_CASE("Planning rejects invalid timing and sample rates", "[planner]") {
+    auto s = make_simple_scenario();
+    s.emitters[0].start_after_sec = std::numeric_limits<double>::quiet_NaN();
+    auto result = plan(s);
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error()[0].code == "E_PLAN_INVALID_TIMING");
+
+    s = make_simple_scenario();
+    s.devices[0].rf.rate_sps = std::numeric_limits<double>::infinity();
+    result = plan(s);
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error()[0].code == "E_PLAN_INVALID_SAMPLE_RATE");
+}
+
+TEST_CASE("Planning rejects invalid repeat settings", "[planner]") {
+    auto s = make_simple_scenario();
+    s.emitters[0].repeat = RepeatSpec{0, 0.0};
+
+    auto result = plan(s);
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error()[0].code == "E_PLAN_INVALID_REPEAT");
+}
+
+TEST_CASE("Planning rejects malformed scenario events directly", "[planner][events]") {
+    auto has_error = [](const ErrorList& errors, const std::string& code) {
+        return std::any_of(errors.begin(), errors.end(), [&](const Error& error) {
+            return error.code == code;
+        });
+    };
+
+    SECTION("unknown type") {
+        auto s = make_simple_scenario();
+        s.events.push_back({"usrp0", 1.0, "unknown_type", nlohmann::json::object()});
+
+        auto result = plan(s);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(has_error(result.error(), "E_PLAN_INVALID_EVENT_TYPE"));
+    }
+
+    SECTION("invalid timing") {
+        auto s = make_simple_scenario();
+        s.events.push_back({"usrp0", -1.0, "marker", nlohmann::json::object()});
+
+        auto result = plan(s);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(has_error(result.error(), "E_PLAN_INVALID_EVENT_TIME"));
+    }
+
+    SECTION("unknown target device") {
+        auto s = make_simple_scenario();
+        s.events.push_back({"missing", 1.0, "retune", nlohmann::json{{"freq_hz", 2.4e9}}});
+
+        auto result = plan(s);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(has_error(result.error(), "E_PLAN_EVENT_UNKNOWN_DEVICE"));
+    }
+
+    SECTION("missing retune payload") {
+        auto s = make_simple_scenario();
+        s.events.push_back({"usrp0", 1.0, "retune", nlohmann::json::object()});
+
+        auto result = plan(s);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(has_error(result.error(), "E_PLAN_INVALID_EVENT_PAYLOAD"));
+    }
+
+    SECTION("invalid channel payload") {
+        auto s = make_simple_scenario();
+        s.events.push_back({"usrp0", 1.0, "gain_change",
+                            nlohmann::json{{"gain_db", 12.0}, {"channel", -1}}});
+
+        auto result = plan(s);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(has_error(result.error(), "E_PLAN_INVALID_EVENT_PAYLOAD"));
+    }
+
+    SECTION("unknown event channel") {
+        auto s = make_simple_scenario();
+        s.events.push_back({"usrp0", 1.0, "gain_change",
+                            nlohmann::json{{"gain_db", 12.0}, {"channel", 7}}});
+
+        auto result = plan(s);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(has_error(result.error(), "E_PLAN_EVENT_UNKNOWN_CHANNEL"));
+    }
+
+    SECTION("unknown waveform switch emitter") {
+        auto s = make_simple_scenario();
+        s.events.push_back({"usrp0", 1.0, "waveform_switch",
+                            nlohmann::json{{"emitter_id", "missing"}, {"new_waveform", "wf2"}}});
+
+        auto result = plan(s);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(has_error(result.error(), "E_PLAN_EVENT_UNKNOWN_EMITTER"));
+    }
+
+    SECTION("invalid impairment change payload") {
+        auto s = make_simple_scenario();
+        s.events.push_back({"usrp0", 1.0, "impairment_change",
+                            nlohmann::json{{"emitter_id", "cw1"},
+                                           {"impairment", "cfo_hz"},
+                                           {"enabled", "yes"}}});
+
+        auto result = plan(s);
+        REQUIRE_FALSE(result.has_value());
+        REQUIRE(has_error(result.error(), "E_PLAN_INVALID_EVENT_PAYLOAD"));
+    }
 }
 
 TEST_CASE("Warning emitted for emitter starting at time 0", "[planner]") {

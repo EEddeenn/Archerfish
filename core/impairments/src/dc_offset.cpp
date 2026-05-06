@@ -3,13 +3,19 @@
 #include <complex>
 #include <cstddef>
 
+#include "validation.hpp"
+
 namespace archerfish::impairments {
 
 DcOffsetImpairment::DcOffsetImpairment(double dc_i, double dc_q)
     : dc_i_(dc_i),
-      dc_q_(dc_q) {}
+      dc_q_(dc_q) {
+    detail::require_finite(dc_i_, "DC I offset");
+    detail::require_finite(dc_q_, "DC Q offset");
+}
 
 void DcOffsetImpairment::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "DcOffsetImpairment");
     if (!enabled_) {
         return;
     }

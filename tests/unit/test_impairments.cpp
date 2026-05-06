@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/common/constants.hpp"
@@ -70,6 +71,13 @@ TEST_CASE("AWGN disable", "[impairments][awgn]") {
     }
 }
 
+TEST_CASE("AWGN rejects invalid noise power", "[impairments][awgn]") {
+    REQUIRE_THROWS_AS(archerfish::impairments::AwgnImpairment(-0.1), std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        archerfish::impairments::AwgnImpairment(std::numeric_limits<double>::quiet_NaN()),
+        std::invalid_argument);
+}
+
 TEST_CASE("CFO zero offset preserves data", "[impairments][cfo]") {
     archerfish::impairments::CfoImpairment cfo(0.0, 1e6);
     std::vector<std::complex<float>> data = {{1.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f}};
@@ -129,6 +137,13 @@ TEST_CASE("CFO disable", "[impairments][cfo]") {
     REQUIRE(data[0] == original[0]);
 }
 
+TEST_CASE("CFO rejects invalid parameters", "[impairments][cfo]") {
+    REQUIRE_THROWS_AS(archerfish::impairments::CfoImpairment(1.0, 0.0), std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        archerfish::impairments::CfoImpairment(std::numeric_limits<double>::infinity(), 1e6),
+        std::invalid_argument);
+}
+
 TEST_CASE("PhaseOffset zero preserves data", "[impairments][phase_offset]") {
     archerfish::impairments::PhaseOffsetImpairment po(0.0);
     std::vector<std::complex<float>> data = {{1.0f, 0.0f}, {0.0f, 1.0f}};
@@ -168,6 +183,12 @@ TEST_CASE("PhaseOffset disable", "[impairments][phase_offset]") {
     po.apply(data.data(), data.size());
 
     REQUIRE(data[0] == original[0]);
+}
+
+TEST_CASE("PhaseOffset rejects non-finite angles", "[impairments][phase_offset]") {
+    REQUIRE_THROWS_AS(
+        archerfish::impairments::PhaseOffsetImpairment(std::numeric_limits<double>::quiet_NaN()),
+        std::invalid_argument);
 }
 
 TEST_CASE("IQImbalance zero imbalance preserves data", "[impairments][iq_imbalance]") {
@@ -217,6 +238,15 @@ TEST_CASE("IQImbalance disable", "[impairments][iq_imbalance]") {
     REQUIRE(data[0] == original[0]);
 }
 
+TEST_CASE("IQImbalance rejects non-finite parameters", "[impairments][iq_imbalance]") {
+    REQUIRE_THROWS_AS(
+        archerfish::impairments::IqImbalanceImpairment(std::numeric_limits<double>::infinity(), 0.0),
+        std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        archerfish::impairments::IqImbalanceImpairment(0.0, std::numeric_limits<double>::quiet_NaN()),
+        std::invalid_argument);
+}
+
 TEST_CASE("DCOffset adds constant", "[impairments][dc_offset]") {
     archerfish::impairments::DcOffsetImpairment dc(0.1, 0.2);
     std::vector<std::complex<float>> data(10, {1.0f, 1.0f});
@@ -245,4 +275,13 @@ TEST_CASE("DCOffset disable", "[impairments][dc_offset]") {
     dc.apply(data.data(), data.size());
 
     REQUIRE(data[0] == original[0]);
+}
+
+TEST_CASE("DCOffset rejects non-finite offsets", "[impairments][dc_offset]") {
+    REQUIRE_THROWS_AS(
+        archerfish::impairments::DcOffsetImpairment(std::numeric_limits<double>::quiet_NaN(), 0.0),
+        std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        archerfish::impairments::DcOffsetImpairment(0.0, std::numeric_limits<double>::infinity()),
+        std::invalid_argument);
 }

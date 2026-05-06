@@ -2,6 +2,7 @@
 
 #include <complex>
 #include <cstddef>
+#include <limits>
 #include <stdexcept>
 
 #include "archerfish/impairments/amplitude_ripple.hpp"
@@ -17,6 +18,7 @@
 #include "archerfish/impairments/phase_offset.hpp"
 #include "archerfish/impairments/phase_noise.hpp"
 #include "archerfish/scenario/scenario.hpp"
+#include "validation.hpp"
 
 namespace archerfish::impairments {
 
@@ -25,6 +27,7 @@ void ImpairmentChain::add(std::unique_ptr<IImpairment> impairment) {
 }
 
 void ImpairmentChain::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "ImpairmentChain");
     for (auto& impairment : chain_) {
         impairment->apply(data, count);
     }
@@ -77,10 +80,18 @@ std::unique_ptr<ImpairmentChain> build_chain(
         chain->add(std::make_unique<PhaseNoiseImpairment>(
             *imp.phase_noise_bandwidth_hz, *imp.phase_noise_magnitude_rad,
             sample_rate, imp.phase_noise_psd_shape.value_or("1f")));
-    if (imp.multipath_delay_samples.has_value() && imp.multipath_amplitude.has_value())
+    if (imp.multipath_delay_samples.has_value() && imp.multipath_amplitude.has_value()) {
+        detail::require_nonnegative_finite(*imp.multipath_delay_samples, "Multipath delay samples");
+        if (std::floor(*imp.multipath_delay_samples) != *imp.multipath_delay_samples) {
+            throw std::invalid_argument("Multipath delay samples must be an integer");
+        }
+        if (*imp.multipath_delay_samples > static_cast<double>(std::numeric_limits<size_t>::max())) {
+            throw std::invalid_argument("Multipath delay samples is too large");
+        }
         chain->add(std::make_unique<MultipathImpairment>(
             static_cast<size_t>(*imp.multipath_delay_samples),
             static_cast<float>(*imp.multipath_amplitude)));
+    }
     if (imp.fading_doppler_hz.has_value())
         chain->add(std::make_unique<FadingImpairment>(
             *imp.fading_doppler_hz, sample_rate,

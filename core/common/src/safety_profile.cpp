@@ -22,10 +22,32 @@ common::ErrorList check_safety_profile(
     double freq_hz) {
     common::ErrorList errors;
 
-    if (std::isnan(gain_db) || std::isnan(amplitude) || std::isnan(freq_hz)) {
+    if (!std::isfinite(profile.max_gain_db) || !std::isfinite(profile.max_amplitude) ||
+        !std::isfinite(profile.min_freq_hz) || !std::isfinite(profile.max_freq_hz) ||
+        profile.max_amplitude < 0.0 || profile.min_freq_hz <= 0.0 ||
+        profile.max_freq_hz <= profile.min_freq_hz) {
         errors.push_back({common::ErrorCategory::Validation,
-                          "W_SAFETY_NAN",
-                          "NaN value passed to safety check"});
+                          "V_SAFETY_INVALID_PROFILE",
+                          "Invalid safety profile limits"});
+        return errors;
+    }
+
+    if (!std::isfinite(gain_db) || !std::isfinite(amplitude) || !std::isfinite(freq_hz)) {
+        errors.push_back({common::ErrorCategory::Validation,
+                          "V_SAFETY_NONFINITE_INPUT",
+                          "Non-finite value passed to safety check"});
+        return errors;
+    }
+    if (amplitude < 0.0) {
+        errors.push_back({common::ErrorCategory::Validation,
+                          "V_SAFETY_INVALID_AMPLITUDE",
+                          "Safety check amplitude must be >= 0"});
+        return errors;
+    }
+    if (freq_hz <= 0.0) {
+        errors.push_back({common::ErrorCategory::Validation,
+                          "V_SAFETY_INVALID_FREQUENCY",
+                          "Safety check frequency must be > 0"});
         return errors;
     }
 

@@ -182,3 +182,37 @@ TEST_CASE("RunDirectory append_log adds lines to logs.txt", "[reporting][run_dir
     }
     cleanup_test_dir();
 }
+
+TEST_CASE("RunDirectory creates unique paths for repeated names", "[reporting][run_directory]") {
+    cleanup_test_dir();
+    {
+        RunDirectory first(test_base, "same name");
+        RunDirectory second(test_base, "same name");
+
+        CHECK(first.path() != second.path());
+        CHECK(std::filesystem::exists(first.path()));
+        CHECK(std::filesystem::exists(second.path()));
+    }
+    cleanup_test_dir();
+}
+
+TEST_CASE("RunDirectory falls back when scenario name sanitizes empty", "[reporting][run_directory]") {
+    cleanup_test_dir();
+    {
+        RunDirectory rd(test_base, "###");
+        CHECK(rd.path().filename().string().find("scenario") != std::string::npos);
+        CHECK(std::filesystem::exists(rd.path()));
+    }
+    cleanup_test_dir();
+}
+
+TEST_CASE("RunDirectory truncates long sanitized scenario names", "[reporting][run_directory]") {
+    cleanup_test_dir();
+    {
+        std::string long_name(1000, 'a');
+        RunDirectory rd(test_base, long_name);
+        CHECK(std::filesystem::exists(rd.path()));
+        CHECK(rd.path().filename().string().size() <= 100);
+    }
+    cleanup_test_dir();
+}

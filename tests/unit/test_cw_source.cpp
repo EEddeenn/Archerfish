@@ -46,6 +46,22 @@ TEST_CASE("CW at F Hz produces correct phase progression", "[dsp][cw]") {
     }
 }
 
+TEST_CASE("CW wraps high carrier phase modulo one cycle", "[dsp][cw]") {
+    CwSource src;
+    src.configure({{"amplitude", 1.0}, {"frequency_hz", 2.5e6}, {"sample_rate", 1e6}});
+    src.prepare();
+
+    std::vector<std::complex<float>> buf(4);
+    REQUIRE(src.render_block(buf.data(), buf.size()) == buf.size());
+
+    REQUIRE_THAT(buf[0].real(), WithinAbs(1.0f, 1e-5f));
+    REQUIRE_THAT(buf[0].imag(), WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(buf[1].real(), WithinAbs(-1.0f, 1e-5f));
+    REQUIRE_THAT(buf[1].imag(), WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(buf[2].real(), WithinAbs(1.0f, 1e-5f));
+    REQUIRE_THAT(buf[2].imag(), WithinAbs(0.0f, 1e-5f));
+}
+
 TEST_CASE("CW metadata is correct", "[dsp][cw]") {
     CwSource src;
     src.configure({{"amplitude", 0.5}, {"sample_rate", 2e6}, {"duration_sec", 0.001}});
@@ -53,6 +69,8 @@ TEST_CASE("CW metadata is correct", "[dsp][cw]") {
 
     auto meta = src.report_metadata();
     REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.5, 1e-9));
+    REQUIRE_THAT(meta.rms_amplitude, WithinAbs(0.5, 1e-9));
+    REQUIRE_THAT(meta.crest_factor, WithinAbs(1.0, 1e-9));
     REQUIRE_THAT(meta.sample_rate, WithinAbs(2e6, 1e-9));
     REQUIRE(meta.duration_sec.has_value());
     REQUIRE_THAT(meta.duration_sec.value(), WithinAbs(0.001, 1e-12));

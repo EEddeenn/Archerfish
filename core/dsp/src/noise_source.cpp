@@ -1,11 +1,14 @@
 #include "archerfish/dsp/noise_source.hpp"
 
 #include <cmath>
+#include <stdexcept>
 
 namespace archerfish::dsp {
 
 void NoiseSource::configure(const nlohmann::json& params) {
     configure_common(params);
+    rng_.seed(seed());
+    dist_ = std::normal_distribution<float>(0.0f, static_cast<float>(amplitude()));
 }
 
 void NoiseSource::prepare() {
@@ -15,6 +18,9 @@ void NoiseSource::prepare() {
 }
 
 size_t NoiseSource::render_block(std::complex<float>* out, size_t max_samples) {
+    if (max_samples > 0 && out == nullptr) {
+        throw std::invalid_argument("NoiseSource render output buffer must not be null");
+    }
     size_t to_generate = compute_block_size(max_samples);
     if (to_generate == 0)
         return 0;

@@ -71,6 +71,7 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
 
     // --- devices subcommand ---
     auto* devices = app->add_subcommand("devices", "Device management");
+    devices->require_subcommand(1);
 
     auto* devices_list = devices->add_subcommand("list", "List available devices");
     devices_list->callback([&opts]() { opts.last_exit_code = cmd_devices_list(opts); });
@@ -81,6 +82,7 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
 
     // --- scenario subcommand ---
     auto* scenario = app->add_subcommand("scenario", "Scenario operations");
+    scenario->require_subcommand(1);
 
     auto* scenario_validate = scenario->add_subcommand("validate", "Validate a scenario file");
     scenario_validate->add_option("file", reg->file_path, "Scenario JSON file")->required()->check(CLI::ExistingFile);
@@ -99,8 +101,10 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
 
     // --- wave subcommand ---
     auto* wave = app->add_subcommand("wave", "Waveform generation and inspection");
+    wave->require_subcommand(1);
 
     auto* wave_gen = wave->add_subcommand("gen", "Generate waveforms");
+    wave_gen->require_subcommand(1);
 
     auto* wave_gen_cw = wave_gen->add_subcommand("cw", "Generate CW waveform");
     wave_gen_cw->add_option("--rate", reg->rate, "Sample rate (Hz)")->required();
@@ -223,6 +227,7 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
 
     // --- report subcommand ---
     auto* report = app->add_subcommand("report", "Report operations");
+    report->require_subcommand(1);
 
     auto* report_show = report->add_subcommand("show", "Show a run report");
     report_show->add_option("run_id", reg->run_id, "Run ID (partial match)")->required();
@@ -240,6 +245,7 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
 
     // --- metrics subcommand ---
     auto* metrics_cmd = app->add_subcommand("metrics", "Metrics operations");
+    metrics_cmd->require_subcommand(1);
 
     auto* metrics_export = metrics_cmd->add_subcommand("export", "Export metrics from a run");
     metrics_export->add_flag("--latest", reg->metrics_latest, "Export from latest run")->required();
@@ -270,6 +276,7 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
 
     // --- schema subcommand ---
     auto* schema_cmd = app->add_subcommand("schema", "Schema operations");
+    schema_cmd->require_subcommand(1);
     auto* schema_print = schema_cmd->add_subcommand("print", "Print schema information");
     schema_print->add_flag("--json", reg->schema_json, "Output raw JSON schema");
     schema_print->add_flag("--markdown", reg->schema_markdown, "Output markdown table of waveform types");
@@ -277,6 +284,7 @@ std::shared_ptr<CLI::App> build_app(CliOptions& opts) {
 
     // --- calib subcommand ---
     auto* calib_cmd = app->add_subcommand("calib", "Calibration management");
+    calib_cmd->require_subcommand(1);
 
     auto* calib_init = calib_cmd->add_subcommand("init", "Initialize a calibration file");
     calib_init->add_option("--device", reg->device_id, "Device ID")->required();

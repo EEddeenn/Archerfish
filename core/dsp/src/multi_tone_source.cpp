@@ -3,22 +3,48 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
+#include <utility>
 
 #include "archerfish/common/constants.hpp"
 
 namespace archerfish::dsp {
 
 void MultiToneSource::configure(const nlohmann::json& params) {
-    configure_common(params);
+    std::vector<ToneSpec> next_tones = tones_;
     if (params.contains("tones")) {
-        tones_.clear();
+        if (!params["tones"].is_array()) {
+            throw std::invalid_argument("tones must be an array");
+        }
+        next_tones.clear();
         for (const auto& t : params["tones"]) {
+            if (!t.is_object()) {
+                throw std::invalid_argument("each tone must be an object");
+            }
             ToneSpec spec;
-            spec.frequency_hz = t.value("frequency_hz", 0.0);
-            spec.amplitude = t.value("amplitude", 0.2);
-            tones_.push_back(spec);
+            spec.frequency_hz = t.contains("frequency_hz") ? number_param(t, "frequency_hz") : 0.0;
+            spec.amplitude = t.contains("amplitude") ? number_param(t, "amplitude") : 0.2;
+            if (!std::isfinite(spec.frequency_hz)) {
+                throw std::invalid_argument("tone frequency_hz must be finite");
+            }
+            validate_non_negative(spec.amplitude, "tone amplitude");
+            if (spec.amplitude > static_cast<double>(std::numeric_limits<float>::max())) {
+                throw std::out_of_range("tone amplitude exceeds float range");
+            }
+            next_tones.push_back(spec);
         }
     }
+
+    long double peak_amplitude = 0.0L;
+    for (const auto& tone : next_tones) {
+        peak_amplitude += static_cast<long double>(tone.amplitude);
+        if (peak_amplitude > static_cast<long double>(std::numeric_limits<float>::max())) {
+            throw std::out_of_range("multi-tone peak amplitude exceeds float range");
+        }
+    }
+
+    configure_common(params);
+    tones_ = std::move(next_tones);
 }
 
 void MultiToneSource::prepare() {
@@ -26,6 +52,9 @@ void MultiToneSource::prepare() {
 }
 
 size_t MultiToneSource::render_block(std::complex<float>* out, size_t max_samples) {
+    if (max_samples > 0 && out == nullptr) {
+        throw std::invalid_argument("MultiToneSource render output buffer must not be null");
+    }
     size_t to_generate = compute_block_size(max_samples);
     if (to_generate == 0)
         return 0;
@@ -52,11 +81,14 @@ WaveformMetadata MultiToneSource::report_metadata() const {
     fill_common_metadata(meta);
 
     double total_amp = 0.0;
-    for (const auto& t : tones_)
+    double sum_amp_sq = 0.0;
+    for (const auto& t : tones_) {
         total_amp += t.amplitude;
+        sum_amp_sq += t.amplitude * t.amplitude;
+    }
     meta.peak_amplitude = total_amp;
-    meta.rms_amplitude = total_amp / std::sqrt(2.0);
-    meta.crest_factor = std::sqrt(2.0);
+    meta.rms_amplitude = std::sqrt(sum_amp_sq);
+    meta.crest_factor = meta.rms_amplitude > 0.0 ? meta.peak_amplitude / meta.rms_amplitude : 0.0;
 
     double fmin = std::numeric_limits<double>::max();
     double fmax = std::numeric_limits<double>::lowest();

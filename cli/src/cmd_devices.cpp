@@ -5,11 +5,42 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cctype>
+#include <exception>
+#include <memory>
+#include <string_view>
+#include <vector>
 
 namespace archerfish::cli {
 
+namespace {
+
+bool is_blank(std::string_view value) {
+    return std::all_of(value.begin(), value.end(), [](unsigned char ch) {
+        return std::isspace(ch) != 0;
+    });
+}
+
+hal::DiscoveredDevice stub_discovery_info() {
+    return {
+        "stub0",
+        "stub",
+        "stub",
+        "",
+        hal::DeviceCapabilities{},
+    };
+}
+
+} // namespace
+
 int cmd_devices_list(const CliOptions& opts) {
-    auto devices = hal::discover_devices();
+    std::vector<hal::DiscoveredDevice> devices;
+    try {
+        devices = hal::discover_devices();
+    } catch (const std::exception& e) {
+        fmt::print(stderr, "Error discovering devices: {}\n", e.what());
+        return static_cast<int>(ExitCode::GenericFailure);
+    }
 
     if (opts.json_output) {
         nlohmann::json arr = nlohmann::json::array();
@@ -48,18 +79,39 @@ int cmd_devices_list(const CliOptions& opts) {
 }
 
 int cmd_devices_info(const CliOptions& opts, const std::string& device_id) {
-    auto devices = hal::discover_devices();
-
-    auto it = std::find_if(devices.begin(), devices.end(),
-        [&](const hal::DiscoveredDevice& d) { return d.id == device_id; });
-
-    if (it == devices.end()) {
-        fmt::print(stderr, "Error: device '{}' not found.\n", device_id);
+    if (is_blank(device_id)) {
+        fmt::print(stderr, "Error: device ID must not be empty.\n");
         return static_cast<int>(ExitCode::InputValidationFailure);
     }
 
-    const auto& dev = *it;
-    auto device = hal::open_device(device_id);
+    hal::DiscoveredDevice dev;
+    if (device_id == "stub0") {
+        dev = stub_discovery_info();
+    } else {
+        std::vector<hal::DiscoveredDevice> devices;
+        try {
+            devices = hal::discover_devices();
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "Error discovering devices: {}\n", e.what());
+            return static_cast<int>(ExitCode::GenericFailure);
+        }
+
+        auto it = std::find_if(devices.begin(), devices.end(),
+            [&](const hal::DiscoveredDevice& d) { return d.id == device_id; });
+
+        if (it == devices.end()) {
+            fmt::print(stderr, "Error: device '{}' not found.\n", device_id);
+            return static_cast<int>(ExitCode::InputValidationFailure);
+        }
+        dev = *it;
+    }
+    std::unique_ptr<hal::IHalDevice> device;
+    try {
+        device = hal::open_device(device_id);
+    } catch (const std::exception& e) {
+        fmt::print(stderr, "Error opening device '{}': {}\n", device_id, e.what());
+        return static_cast<int>(ExitCode::PreparationFailure);
+    }
     auto caps = device->get_capabilities();
 
     if (opts.json_output) {
@@ -84,10 +136,10 @@ int cmd_devices_info(const CliOptions& opts, const std::string& device_id) {
         fmt::print("  Product:       {}\n", dev.product);
         fmt::print("  Serial:        {}\n", dev.serial);
         fmt::print("  Channels:      {}\n", caps.num_channels);
-        fmt::print("  Freq range:    {:.2e} — {:.2e} Hz\n", caps.freq_range.min_val, caps.freq_range.max_val);
-        fmt::print("  Rate range:    {:.2e} — {:.2e} Sps\n", caps.rate_range.min_val, caps.rate_range.max_val);
-        fmt::print("  Gain range:    {:.1f} — {:.1f} dB\n", caps.gain_range.min_val, caps.gain_range.max_val);
-        fmt::print("  BW range:      {:.2e} — {:.2e} Hz\n", caps.bandwidth_range.min_val, caps.bandwidth_range.max_val);
+        fmt::print("  Freq range:    {:.2e} - {:.2e} Hz\n", caps.freq_range.min_val, caps.freq_range.max_val);
+        fmt::print("  Rate range:    {:.2e} - {:.2e} Sps\n", caps.rate_range.min_val, caps.rate_range.max_val);
+        fmt::print("  Gain range:    {:.1f} - {:.1f} dB\n", caps.gain_range.min_val, caps.gain_range.max_val);
+        fmt::print("  BW range:      {:.2e} - {:.2e} Hz\n", caps.bandwidth_range.min_val, caps.bandwidth_range.max_val);
         fmt::print("  Clock sources: ");
         for (size_t i = 0; i < caps.supported_clock_sources.size(); ++i) {
             if (i > 0) fmt::print(", ");

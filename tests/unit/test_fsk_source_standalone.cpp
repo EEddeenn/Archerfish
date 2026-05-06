@@ -107,4 +107,18 @@ TEST_CASE("FSK source metadata reports sample rate and amplitude", "[dsp][fsk_so
     auto meta = src.report_metadata();
     REQUIRE_THAT(meta.sample_rate, WithinAbs(2e6, 1e-9));
     REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.3, 1e-9));
+    REQUIRE_THAT(meta.rms_amplitude, WithinAbs(0.3, 1e-9));
+    REQUIRE_THAT(meta.crest_factor, WithinAbs(1.0, 1e-9));
+}
+
+TEST_CASE("FSK source rejects symbol rate above sample rate", "[dsp][fsk_source]") {
+    FskSource src;
+    src.configure({{"amplitude", 0.5},
+                   {"center_frequency_hz", 0.0},
+                   {"symbol_rate", 2000.0},
+                   {"deviation_hz", 5000.0},
+                   {"sample_rate", 1000.0},
+                   {"seed", 42}});
+
+    CHECK_THROWS_AS(src.prepare(), std::invalid_argument);
 }

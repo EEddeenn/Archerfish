@@ -238,7 +238,9 @@ TEST_CASE("All schema errors use ErrorCategory::Config", "[schema_validation]") 
 TEST_CASE("All waveform types are accepted by schema", "[schema_validation]") {
     const std::vector<std::string> types = {
         "cw", "chirp", "noise", "qpsk", "bpsk",
-        "8psk", "qam16", "qam64", "multi_tone", "file"
+        "8psk", "qam16", "qam64", "apsk16", "apsk32",
+        "multi_tone", "file", "pulse", "ask", "fsk",
+        "am", "fm", "pm", "ofdm"
     };
     for (const auto& t : types) {
         auto instance = nlohmann::json::parse(fmt::format(R"({{
@@ -250,6 +252,112 @@ TEST_CASE("All waveform types are accepted by schema", "[schema_validation]") {
         INFO("Waveform type: " << t);
         CHECK(result.has_value());
     }
+}
+
+TEST_CASE("Waveform target_power_dbm must be numeric", "[schema_validation]") {
+    auto instance = make_valid_scenario();
+
+    SECTION("inline waveform") {
+        instance["emitters"][0]["waveform"]["target_power_dbm"] = "high";
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("top-level waveform") {
+        instance["waveforms"] = nlohmann::json::array({
+            {{"id", "cw_ref"}, {"type", "cw"}, {"target_power_dbm", "high"}}
+        });
+        instance["emitters"][0].erase("waveform");
+        instance["emitters"][0]["waveform_ref"] = "cw_ref";
+
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+}
+
+TEST_CASE("Schema rejects empty identity and reference strings", "[schema_validation]") {
+    auto instance = make_valid_scenario();
+
+    SECTION("device id") {
+        instance["devices"][0]["id"] = "";
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("emitter id") {
+        instance["emitters"][0]["id"] = "";
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("waveform id and ref") {
+        instance["waveforms"] = nlohmann::json::array({{{"id", ""}, {"type", "cw"}}});
+        instance["emitters"][0].erase("waveform");
+        instance["emitters"][0]["waveform_ref"] = "";
+
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("channel id and sync group refs") {
+        instance["channels"] = nlohmann::json::array({
+            {{"id", ""}, {"device", "usrp0"}, {"index", 0}, {"rf", instance["devices"][0]["rf"]}}
+        });
+        instance["emitters"][0]["channel_id"] = "";
+        instance["sync_groups"] = nlohmann::json::array({
+            {{"id", ""}, {"channels", nlohmann::json::array({""})}, {"mode", "coherent"}}
+        });
+
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("event target device") {
+        instance["events"] = nlohmann::json::array({
+            {{"target_device", ""}, {"time_sec", 0.1}, {"type", "marker"}}
+        });
+
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+}
+
+TEST_CASE("Repeat schema matches validator repeat bounds", "[schema_validation][repeat]") {
+    auto instance = make_valid_scenario();
+
+    SECTION("single repetition permits zero interval") {
+        instance["emitters"][0]["repeat"] = {{"count", 1}, {"interval_sec", 0.0}};
+        auto result = validate_schema(instance);
+        REQUIRE(result.has_value());
+    }
+
+    SECTION("count above runtime limit is rejected") {
+        instance["emitters"][0]["repeat"] = {{"count", 1025}, {"interval_sec", 0.1}};
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("multiple repetitions require positive interval") {
+        instance["emitters"][0]["repeat"] = {{"count", 2}, {"interval_sec", 0.0}};
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("multiple repetitions require explicit interval") {
+        instance["emitters"][0]["repeat"] = {{"count", 2}};
+        auto result = validate_schema(instance);
+        REQUIRE_FALSE(result.has_value());
+    }
+}
+
+TEST_CASE("Schema rejects unsupported burst event type", "[schema_validation][events]") {
+    auto instance = make_valid_scenario();
+    instance["events"] = nlohmann::json::array({
+        {{"target_device", "usrp0"}, {"time_sec", 0.5}, {"type", "burst"}, {"payload", nlohmann::json::object()}}
+    });
+
+    auto result = validate_schema(instance);
+    REQUIRE_FALSE(result.has_value());
 }
 
 TEST_CASE("Device missing rf produces error", "[schema_validation]") {

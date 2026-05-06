@@ -6,6 +6,8 @@ using archerfish::dsp::WaveformType;
 
 #include "archerfish/scenario/validator.hpp"
 
+#include <limits>
+
 using namespace archerfish::scenario;
 using namespace archerfish::common;
 
@@ -35,6 +37,30 @@ TEST_CASE("Valid scenario returns ok()", "[validator]") {
     CHECK(result.errors.empty());
 }
 
+TEST_CASE("Missing metadata name produces error", "[validator]") {
+    auto s = make_valid_scenario();
+    s.metadata.name.clear();
+    auto result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error_with_code(result, "V013_MISSING_METADATA_NAME"));
+}
+
+TEST_CASE("Identity fields must be non-empty", "[validator]") {
+    auto s = make_valid_scenario();
+    s.devices[0].id.clear();
+    s.emitters[0].id.clear();
+    s.emitters[0].device.clear();
+    s.waveforms.push_back(WaveformDef{"", WaveformType::CW, {{"amplitude", 0.2}}});
+    s.channel_defs.push_back({"", "", 0, {2450000000.0, 10000000.0, 20.0}});
+
+    auto result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error_with_code(result, "V010_EMPTY_DEVICE_ID"));
+    CHECK(has_error_with_code(result, "V011_EMPTY_EMITTER_ID"));
+    CHECK(has_error_with_code(result, "V012_EMPTY_WAVEFORM_ID"));
+    CHECK(has_error_with_code(result, "V020_EMPTY_CHANNEL_ID"));
+}
+
 TEST_CASE("Amplitude > 1.0 produces error", "[validator]") {
     auto s = make_valid_scenario();
     s.emitters[0].waveform->params["amplitude"] = 1.5;
@@ -51,6 +77,19 @@ TEST_CASE("Amplitude <= 0 produces error", "[validator]") {
     CHECK(has_error_with_code(result, "V001_INVALID_AMPLITUDE"));
 
     s.emitters[0].waveform->params["amplitude"] = 0.0;
+    result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error_with_code(result, "V001_INVALID_AMPLITUDE"));
+}
+
+TEST_CASE("Amplitude must be finite numeric JSON", "[validator]") {
+    auto s = make_valid_scenario();
+    s.emitters[0].waveform->params["amplitude"] = "loud";
+    auto result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error_with_code(result, "V001_INVALID_AMPLITUDE"));
+
+    s.emitters[0].waveform->params["amplitude"] = std::numeric_limits<double>::quiet_NaN();
     result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V001_INVALID_AMPLITUDE"));
@@ -75,6 +114,16 @@ TEST_CASE("Duration <= 0 produces error", "[validator]") {
     result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V002_INVALID_DURATION"));
+}
+
+TEST_CASE("Emitter timing must be finite", "[validator]") {
+    auto s = make_valid_scenario();
+    s.emitters[0].duration_sec = std::numeric_limits<double>::infinity();
+    s.emitters[0].start_after_sec = std::numeric_limits<double>::quiet_NaN();
+    auto result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error_with_code(result, "V002_INVALID_DURATION"));
+    CHECK(has_error_with_code(result, "V002_INVALID_START"));
 }
 
 TEST_CASE("Dangling device reference produces error", "[validator]") {
@@ -110,6 +159,16 @@ TEST_CASE("Emitter with no waveform and no waveform_ref produces error", "[valid
     auto result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V005_NO_WAVEFORM"));
+}
+
+TEST_CASE("Emitter with inline waveform and waveform_ref produces error", "[validator]") {
+    auto s = make_valid_scenario();
+    s.waveforms.push_back(WaveformDef{"my_cw", WaveformType::CW, {{"amplitude", 0.5}}});
+    s.emitters[0].waveform_ref = "my_cw";
+
+    auto result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error_with_code(result, "V005_AMBIGUOUS_WAVEFORM"));
 }
 
 TEST_CASE("Overlapping emitters on same channel produces error", "[validator]") {
@@ -162,6 +221,16 @@ TEST_CASE("freq_hz <= 0 produces error", "[validator]") {
     result = validate(s);
     REQUIRE_FALSE(result.ok());
     CHECK(has_error_with_code(result, "V007_INVALID_FREQ"));
+}
+
+TEST_CASE("RF settings must be finite", "[validator]") {
+    auto s = make_valid_scenario();
+    s.devices[0].rf.freq_hz = std::numeric_limits<double>::quiet_NaN();
+    s.devices[0].rf.rate_sps = std::numeric_limits<double>::infinity();
+    auto result = validate(s);
+    REQUIRE_FALSE(result.ok());
+    CHECK(has_error_with_code(result, "V007_INVALID_FREQ"));
+    CHECK(has_error_with_code(result, "V007_INVALID_RATE"));
 }
 
 TEST_CASE("rate_sps <= 0 produces error", "[validator]") {
@@ -257,4 +326,3 @@ TEST_CASE("Valid waveform types are accepted", "[validator]") {
         CHECK(result.ok());
     }
 }
-

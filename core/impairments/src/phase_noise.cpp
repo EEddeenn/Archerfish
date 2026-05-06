@@ -5,6 +5,7 @@
 #include <cstddef>
 
 #include "archerfish/common/constants.hpp"
+#include "validation.hpp"
 
 namespace archerfish::impairments {
 
@@ -15,13 +16,15 @@ PhaseNoiseImpairment::PhaseNoiseImpairment(double bandwidth_hz, double magnitude
       sample_rate_(sample_rate),
       rng_(std::random_device{}()),
       dist_(0.0, 1.0) {
-    if (bandwidth_hz < 0.0)
-        throw std::invalid_argument("PhaseNoiseImpairment: bandwidth must be >= 0");
+    detail::require_nonnegative_finite(bandwidth_hz_, "Phase noise bandwidth");
+    detail::require_nonnegative_finite(magnitude_rad_, "Phase noise magnitude");
+    detail::require_positive_finite(sample_rate_, "Phase noise sample rate");
     alpha_ = std::exp(-2.0 * archerfish::constants::kPi * bandwidth_hz_ / sample_rate_);
     (void)psd_shape; // reserved for future PSD shaping
 }
 
 void PhaseNoiseImpairment::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "PhaseNoiseImpairment");
     if (!enabled_) {
         return;
     }

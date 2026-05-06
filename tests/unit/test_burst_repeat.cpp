@@ -6,6 +6,8 @@
 #include "archerfish/scenario/validator.hpp"
 #include "archerfish/scenario/planner.hpp"
 
+#include <limits>
+
 using namespace archerfish::scenario;
 using namespace archerfish::common;
 using Catch::Matchers::WithinAbs;
@@ -82,6 +84,29 @@ TEST_CASE("Burst repeat: validator rejects count < 1", "[validator][repeat]") {
     REQUIRE(found);
 }
 
+TEST_CASE("Burst repeat: validator rejects excessive repeat count", "[validator][repeat]") {
+    auto s = make_repeat_scenario(1025, 0.5);
+
+    auto result = validate(s);
+    bool found = false;
+    for (const auto& e : result.errors) {
+        if (e.code == "V017_INVALID_REPEAT_COUNT") found = true;
+    }
+    REQUIRE(found);
+}
+
+TEST_CASE("Burst repeat: planner rejects excessive repeat count", "[scheduler][repeat]") {
+    auto s = make_repeat_scenario(1025, 0.5);
+
+    auto plan_result = plan(s);
+    REQUIRE_FALSE(plan_result.has_value());
+    bool found = false;
+    for (const auto& e : plan_result.error()) {
+        if (e.code == "E_PLAN_INVALID_REPEAT") found = true;
+    }
+    REQUIRE(found);
+}
+
 TEST_CASE("Burst repeat: validator rejects interval <= 0 when count > 1", "[validator][repeat]") {
     Scenario s;
     s.metadata.name = "bad_interval";
@@ -97,6 +122,17 @@ TEST_CASE("Burst repeat: validator rejects interval <= 0 when count > 1", "[vali
     em.waveform = WaveformDef{std::nullopt, archerfish::dsp::WaveformType::CW, {{"amplitude", 0.3}}};
     em.repeat = RepeatSpec{3, 0.0};
     s.emitters.push_back(em);
+
+    auto result = validate(s);
+    bool found = false;
+    for (const auto& e : result.errors) {
+        if (e.code == "V018_INVALID_REPEAT_INTERVAL") found = true;
+    }
+    REQUIRE(found);
+}
+
+TEST_CASE("Burst repeat: validator rejects non-finite interval", "[validator][repeat]") {
+    auto s = make_repeat_scenario(1, std::numeric_limits<double>::quiet_NaN());
 
     auto result = validate(s);
     bool found = false;

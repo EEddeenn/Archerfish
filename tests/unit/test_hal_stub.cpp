@@ -1,7 +1,11 @@
 #include <archerfish/hal/stub_device.hpp>
+#include <archerfish/hal/hal_factory.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+#include <algorithm>
 #include <complex>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
 using namespace archerfish::hal;
@@ -14,6 +18,24 @@ TEST_CASE("StubDevice default construction", "[hal][stub]") {
     CHECK(caps.freq_range.min_val == 0.0);
     CHECK(caps.freq_range.max_val == 6e9);
     CHECK(caps.supports_replay == false);
+}
+
+TEST_CASE("HAL discovery always includes stub device", "[hal][factory]") {
+    auto devices = discover_devices();
+    auto it = std::find_if(devices.begin(), devices.end(), [](const DiscoveredDevice& dev) {
+        return dev.id == "stub0" && dev.type == "stub";
+    });
+    REQUIRE(it != devices.end());
+}
+
+TEST_CASE("HAL factory opens stub and rejects invalid ids", "[hal][factory]") {
+    auto device = open_device("stub0");
+    REQUIRE(device != nullptr);
+    CHECK(device->device_id() == "stub0");
+
+    CHECK_THROWS_AS(open_device(""), std::invalid_argument);
+    CHECK_THROWS_AS(open_device(" \t\n"), std::invalid_argument);
+    CHECK_THROWS_AS(open_device("missing-device"), std::runtime_error);
 }
 
 TEST_CASE("StubDevice custom construction", "[hal][stub]") {
@@ -35,7 +57,7 @@ TEST_CASE("StubDevice RF setters record calls", "[hal][stub]") {
     dev.set_gain(0, 20.0);
     dev.set_antenna(0, "TX/RX");
 
-    auto& hist = dev.call_history();
+    auto hist = dev.call_history();
     REQUIRE(hist.size() == 5);
 
     CHECK(hist[0].method == "set_center_freq");
@@ -61,7 +83,7 @@ TEST_CASE("StubDevice clock/time control records calls", "[hal][stub]") {
     dev.set_time_source("gpsdo");
     dev.sync_time_now();
 
-    auto& hist = dev.call_history();
+    auto hist = dev.call_history();
     REQUIRE(hist.size() == 3);
     CHECK(hist[0].method == "set_clock_source");
     CHECK(hist[0].str_value == "external");
@@ -91,7 +113,7 @@ TEST_CASE("StubDevice send_samples counts samples", "[hal][stub]") {
 
     CHECK(dev.total_samples_sent(0) == 100);
 
-    auto& hist = dev.call_history();
+    auto hist = dev.call_history();
     REQUIRE(hist.size() == 2);
     CHECK(hist[1].method == "send_samples");
     CHECK(hist[1].sample_count == 100);
@@ -99,6 +121,36 @@ TEST_CASE("StubDevice send_samples counts samples", "[hal][stub]") {
     CHECK(hist[1].metadata.has_time_spec == true);
     CHECK(hist[1].metadata.start_of_burst == true);
     CHECK(hist[1].metadata.end_of_burst == false);
+}
+
+TEST_CASE("StubDevice send_samples rejects null data with nonzero count", "[hal][stub]") {
+    StubDevice dev;
+    dev.start_tx(0);
+
+    TxMetadata meta{.end_of_burst = true};
+    auto sent = dev.send_samples(0, nullptr, 10, meta);
+
+    CHECK(sent == 0);
+    CHECK(dev.total_samples_sent(0) == 0);
+
+    const auto& hist = dev.call_history();
+    REQUIRE(hist.size() == 2);
+    CHECK(hist[1].method == "send_samples");
+    CHECK(hist[1].sample_count == 0);
+    CHECK(hist[1].metadata.end_of_burst);
+}
+
+TEST_CASE("StubDevice allows null data for zero-count send", "[hal][stub]") {
+    StubDevice dev;
+    dev.start_tx(0);
+
+    auto sent = dev.send_samples(0, nullptr, 0, {});
+
+    CHECK(sent == 0);
+    CHECK(dev.total_samples_sent(0) == 0);
+    auto hist = dev.call_history();
+    REQUIRE(hist.size() == 2);
+    CHECK(hist[1].sample_count == 0);
 }
 
 TEST_CASE("StubDevice total_samples_sent accumulates", "[hal][stub]") {
@@ -158,4 +210,11 @@ TEST_CASE("Range contains", "[hal]") {
     CHECK(r.contains(200.0));
     CHECK_FALSE(r.contains(99.9));
     CHECK_FALSE(r.contains(200.1));
+}
+
+TEST_CASE("Range contains rejects invalid ranges and values", "[hal]") {
+    CHECK_FALSE(Range{200.0, 100.0}.contains(150.0));
+    CHECK_FALSE(Range{100.0, 200.0}.contains(std::numeric_limits<double>::quiet_NaN()));
+    CHECK_FALSE(Range{std::numeric_limits<double>::quiet_NaN(), 200.0}.contains(150.0));
+    CHECK_FALSE(Range{100.0, std::numeric_limits<double>::infinity()}.contains(150.0));
 }

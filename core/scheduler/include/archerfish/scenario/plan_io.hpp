@@ -25,7 +25,7 @@ namespace archerfish::scenario {
 [[nodiscard]] std::expected<EmitterDef, common::ErrorList> emitter_def_from_json(const nlohmann::json& j);
 
 [[nodiscard]] nlohmann::json reporting_config_to_json(const ReportingConfig& r);
-[[nodiscard]] ReportingConfig reporting_config_from_json(const nlohmann::json& j);
+[[nodiscard]] std::expected<ReportingConfig, common::ErrorList> reporting_config_from_json(const nlohmann::json& j);
 
 [[nodiscard]] nlohmann::json channel_def_to_json(const ChannelDef& c);
 [[nodiscard]] std::expected<ChannelDef, common::ErrorList> channel_def_from_json(const nlohmann::json& j);

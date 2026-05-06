@@ -114,7 +114,7 @@ struct EmitterDef {
 struct ScenarioEvent {
     std::string target_device;
     double time_sec{0.0};
-    std::string type;  // "retune", "gain_change", "marker", "burst", "waveform_switch", "impairment_change"
+    std::string type;  // "retune", "gain_change", "marker", "waveform_switch", "impairment_change"
     nlohmann::json payload;
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -12,6 +13,10 @@ struct Range {
     double max_val{0.0};
 
     [[nodiscard]] bool contains(double val) const {
+        if (!std::isfinite(min_val) || !std::isfinite(max_val) ||
+            !std::isfinite(val) || min_val > max_val) {
+            return false;
+        }
         constexpr double eps = 1e-9;  // Tolerance for floating-point rounding
         return val >= min_val - eps && val <= max_val + eps;
     }

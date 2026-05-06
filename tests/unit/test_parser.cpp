@@ -151,6 +151,7 @@ TEST_CASE("resolve_waveform_refs: valid ref resolves", "[parser]") {
     auto errors = resolve_waveform_refs(s);
     REQUIRE(errors.empty());
     REQUIRE(s.emitters[0].waveform.has_value());
+    REQUIRE_FALSE(s.emitters[0].waveform_ref.has_value());
     REQUIRE(s.emitters[0].waveform->type == WaveformType::CW);
     REQUIRE(s.emitters[0].waveform->params["amplitude"].get<double>() == 0.5);
 }

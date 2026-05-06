@@ -42,6 +42,7 @@ TEST_CASE("E2E Replay: file waveform plays known samples", "[e2e][replay]") {
     std::string file_path_str = cf32_path.string();
     std::string scenario_json = std::string(R"({
         "metadata": { "name": "replay_test" },
+        "run": { "mode": "replay" },
         "devices": [{
             "id": "usrp0",
             "channel": 0,
@@ -100,7 +101,7 @@ TEST_CASE("E2E Replay: file waveform plays known samples", "[e2e][replay]") {
     std::filesystem::remove_all(temp_dir);
 }
 
-TEST_CASE("E2E Replay: nonexistent file produces zero samples", "[e2e][replay]") {
+TEST_CASE("E2E Replay: nonexistent file fails before transmission", "[e2e][replay]") {
     auto temp_dir = std::filesystem::temp_directory_path() / "archerfish_e2e_replay_missing";
     std::filesystem::create_directories(temp_dir);
     auto bad_path = temp_dir / "nonexistent.cf32";
@@ -108,6 +109,7 @@ TEST_CASE("E2E Replay: nonexistent file produces zero samples", "[e2e][replay]")
 
     std::string scenario_json = std::string(R"({
         "metadata": { "name": "replay_missing" },
+        "run": { "mode": "replay" },
         "devices": [{
             "id": "usrp0",
             "channel": 0,
@@ -146,8 +148,8 @@ TEST_CASE("E2E Replay: nonexistent file produces zero samples", "[e2e][replay]")
     Runtime rt(device, config);
     REQUIRE(rt.prepare(*plan_result));
     REQUIRE(rt.arm());
-    REQUIRE(rt.run());
-    REQUIRE(rt.state() == RuntimeState::Completed);
+    REQUIRE_FALSE(rt.run());
+    REQUIRE(rt.state() == RuntimeState::Failed);
 
     REQUIRE(device->total_samples_sent(0) == 0);
 

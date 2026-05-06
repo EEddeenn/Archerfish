@@ -4,13 +4,18 @@
 #include <complex>
 #include <cstddef>
 
+#include "validation.hpp"
+
 namespace archerfish::impairments {
 
 AwgnImpairment::AwgnImpairment(double noise_power, uint32_t seed)
     : noise_power_(noise_power),
-      generator_(seed) {}
+      generator_(seed) {
+    detail::require_nonnegative_finite(noise_power_, "AWGN noise power");
+}
 
 void AwgnImpairment::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "AwgnImpairment");
     if (!enabled_ || noise_power_ <= 0.0) {
         return;
     }

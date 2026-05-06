@@ -3,8 +3,44 @@
 #include "archerfish/hal/stub_device.hpp"
 #include "archerfish/runtime/tx_worker.hpp"
 
+#include <limits>
+#include <stdexcept>
+
 using namespace archerfish::runtime;
 using namespace archerfish::hal;
+
+namespace {
+
+class ThrowingSendDevice : public StubDevice {
+public:
+    using StubDevice::StubDevice;
+
+    size_t send_samples(uint32_t channel,
+                        const std::complex<float>* data,
+                        size_t count,
+                        const TxMetadata& meta) override {
+        (void)channel;
+        (void)data;
+        (void)count;
+        (void)meta;
+        throw std::runtime_error("send failed");
+    }
+};
+
+class PartialSendDevice : public StubDevice {
+public:
+    using StubDevice::StubDevice;
+
+    size_t send_samples(uint32_t channel,
+                        const std::complex<float>* data,
+                        size_t count,
+                        const TxMetadata& meta) override {
+        const size_t accepted = count / 2;
+        return StubDevice::send_samples(channel, data, accepted, meta);
+    }
+};
+
+} // namespace
 
 TEST_CASE("TxWorker sends blocks through queue to device", "[runtime][tx]") {
     StubDevice device;
@@ -126,4 +162,101 @@ TEST_CASE("TxWorker metrics are accessible", "[runtime][tx]") {
     const auto& m = worker.metrics();
     REQUIRE(m.samples_sent.load() == 2);
     REQUIRE(m.blocks_sent.load() == 1);
+}
+
+TEST_CASE("TxWorker handles device send exceptions", "[runtime][tx]") {
+    ThrowingSendDevice device;
+    device.start_tx(0);
+    SampleQueue queue(16);
+
+    TxWorker worker(queue, device, 0);
+    worker.start();
+
+    SampleBlock block;
+    block.samples = {{1.0f, 0.0f}};
+    block.start_of_burst = true;
+    block.end_of_burst = true;
+    REQUIRE(queue.push_notify(std::move(block)));
+
+    worker.join();
+
+    REQUIRE_FALSE(worker.metrics().active.load());
+    REQUIRE(worker.metrics().failed.load());
+    REQUIRE(worker.metrics().samples_sent.load() == 0);
+    REQUIRE(worker.metrics().blocks_sent.load() == 0);
+}
+
+TEST_CASE("TxWorker records underrun on partial device send", "[runtime][tx]") {
+    PartialSendDevice device;
+    device.start_tx(0);
+    SampleQueue queue(16);
+
+    TxWorker worker(queue, device, 0);
+    worker.start();
+
+    SampleBlock block;
+    block.samples.resize(10);
+    block.start_of_burst = true;
+    block.end_of_burst = true;
+    REQUIRE(queue.push_notify(std::move(block)));
+
+    worker.join();
+
+    REQUIRE_FALSE(worker.metrics().active.load());
+    REQUIRE(worker.metrics().samples_sent.load() == 5);
+    REQUIRE(worker.metrics().blocks_sent.load() == 1);
+    REQUIRE(worker.metrics().underruns.load() == 1);
+    REQUIRE(worker.metrics().failed.load());
+    REQUIRE(device.total_samples_sent(0) == 5);
+}
+
+TEST_CASE("TxWorker rejects non-finite timed send metadata", "[runtime][tx]") {
+    StubDevice device;
+    device.start_tx(0);
+    SampleQueue queue(16);
+
+    TxWorker worker(queue, device, 0);
+    worker.start();
+
+    SampleBlock block;
+    block.samples = {{1.0f, 0.0f}};
+    block.start_of_burst = true;
+    block.end_of_burst = true;
+    block.has_time_spec = true;
+    block.time_spec_sec = std::numeric_limits<double>::quiet_NaN();
+    REQUIRE(queue.push_notify(std::move(block)));
+
+    worker.join();
+
+    REQUIRE_FALSE(worker.metrics().active.load());
+    REQUIRE(worker.metrics().samples_sent.load() == 0);
+    REQUIRE(worker.metrics().blocks_sent.load() == 0);
+    REQUIRE(worker.metrics().underruns.load() == 1);
+    REQUIRE(worker.metrics().failed.load());
+    REQUIRE(device.total_samples_sent(0) == 0);
+}
+
+TEST_CASE("TxWorker destructor stops and joins running worker", "[runtime][tx]") {
+    StubDevice device;
+    device.start_tx(0);
+    SampleQueue queue(16);
+
+    {
+        TxWorker worker(queue, device, 0);
+        worker.start();
+    }
+
+    SUCCEED("TxWorker destructor returned without std::terminate");
+}
+
+TEST_CASE("TxWorker rejects double start", "[runtime][tx]") {
+    StubDevice device;
+    device.start_tx(0);
+    SampleQueue queue(16);
+
+    TxWorker worker(queue, device, 0);
+    worker.start();
+    CHECK_THROWS_AS(worker.start(), std::logic_error);
+    worker.request_stop();
+    worker.join();
 }

@@ -24,7 +24,7 @@ TEST_CASE("create_source with WaveformType::Noise returns non-null", "[dsp][sour
 }
 
 TEST_CASE("create_source with string returns non-null for valid types", "[dsp][source_factory]") {
-    for (const char* type : {"cw", "chirp", "noise", "pulse", "am", "fm", "pm", "ask", "fsk", "ofdm"}) {
+    for (const char* type : {"cw", "chirp", "noise", "multi_tone", "file", "pulse", "am", "fm", "pm", "ask", "fsk", "ofdm"}) {
         auto src = create_source(std::string(type));
         REQUIRE(src != nullptr);
     }

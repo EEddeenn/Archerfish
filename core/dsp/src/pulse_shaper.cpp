@@ -1,6 +1,8 @@
 #include "archerfish/dsp/pulse_shaper.hpp"
 
 #include <cmath>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
 #include "archerfish/common/constants.hpp"
@@ -12,6 +14,15 @@ namespace {
 namespace archerfish::dsp {
 
 std::vector<float> RrcFilterDesign::design() const {
+    if (!std::isfinite(alpha) || alpha <= 0.0 || alpha > 1.0) {
+        throw std::invalid_argument("RrcFilterDesign: alpha must be finite and in (0, 1]");
+    }
+    if (span_symbols == 0 || samples_per_symbol == 0) {
+        throw std::invalid_argument("RrcFilterDesign: span_symbols and samples_per_symbol must be nonzero");
+    }
+    if (span_symbols > (std::numeric_limits<size_t>::max() - 1) / samples_per_symbol) {
+        throw std::overflow_error("RrcFilterDesign: tap count overflow");
+    }
     size_t ntaps = span_symbols * samples_per_symbol + 1;
     std::vector<float> taps(ntaps);
 
@@ -45,6 +56,12 @@ std::vector<float> RrcFilterDesign::design() const {
 }
 
 size_t RrcFilterDesign::num_taps() const {
+    if (span_symbols == 0 || samples_per_symbol == 0) {
+        throw std::invalid_argument("RrcFilterDesign: span_symbols and samples_per_symbol must be nonzero");
+    }
+    if (span_symbols > (std::numeric_limits<size_t>::max() - 1) / samples_per_symbol) {
+        throw std::overflow_error("RrcFilterDesign: tap count overflow");
+    }
     return span_symbols * samples_per_symbol + 1;
 }
 

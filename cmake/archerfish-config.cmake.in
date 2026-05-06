@@ -7,6 +7,16 @@ find_dependency(nlohmann_json)
 find_dependency(CLI11)
 find_dependency(SampleRate)
 find_dependency(Threads)
+if(@UHD_FOUND@)
+    find_dependency(UHD)
+    if(NOT TARGET UHD::uhd)
+        add_library(UHD::uhd UNKNOWN IMPORTED)
+        set_target_properties(UHD::uhd PROPERTIES
+            IMPORTED_LOCATION "${UHD_LIBRARIES}"
+            INTERFACE_INCLUDE_DIRECTORIES "${UHD_INCLUDE_DIRS}"
+        )
+    endif()
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/archerfish-targets.cmake")
 check_required_components(archerfish)

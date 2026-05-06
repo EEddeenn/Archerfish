@@ -78,3 +78,30 @@ TEST_CASE("Independent mode sync group passes validation", "[validator][sync_gro
     auto result = validate(s);
     REQUIRE(result.ok());
 }
+
+TEST_CASE("Sync group shape is semantically validated", "[validator][sync_groups]") {
+    auto s = make_scenario_with_channels();
+    s.sync_groups.push_back({"", {}, "timed"});
+    s.sync_groups.push_back({"sg1", {"ch0", "ch0"}, "coherent"});
+    s.sync_groups.push_back({"sg1", {"ch1"}, "independent"});
+
+    auto result = validate(s);
+    CHECK(has_error(result, "V028_SYNC_MISSING_ID"));
+    CHECK(has_error(result, "V029_SYNC_NO_CHANNELS"));
+    CHECK(has_error(result, "V030_SYNC_INVALID_MODE"));
+    CHECK(has_error(result, "V031_SYNC_DUPLICATE_CHANNEL"));
+    CHECK(has_error(result, "V028_DUPLICATE_SYNC_ID"));
+}
+
+TEST_CASE("Sync groups require explicit channel definitions", "[validator][sync_groups]") {
+    Scenario s;
+    s.metadata.name = "sync_no_channels";
+    s.devices.push_back({"usrp0", std::nullopt, {2450000000.0, 10000000.0, 20.0}});
+    s.emitters.push_back({"cw1", "usrp0", 0, 0.0, 1.0,
+                          WaveformDef{std::nullopt, WaveformType::CW, {{"amplitude", 0.2}}},
+                          std::nullopt});
+    s.sync_groups.push_back({"sg1", {"ch0"}, "coherent"});
+
+    auto result = validate(s);
+    REQUIRE(has_error(result, "V024_SYNC_UNKNOWN_CHANNEL"));
+}

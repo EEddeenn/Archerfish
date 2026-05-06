@@ -4,6 +4,7 @@
 
 #include <string>
 #include <string_view>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -46,7 +47,7 @@ public:
 
     [[nodiscard]] bool is_tx_active(uint32_t channel) const override;
 
-    [[nodiscard]] const std::vector<DeviceCallRecord>& call_history() const;
+    [[nodiscard]] std::vector<DeviceCallRecord> call_history() const;
     [[nodiscard]] size_t total_samples_sent(uint32_t channel) const;
     void reset();
 
@@ -55,6 +56,7 @@ private:
     void record_str(std::string method, uint32_t ch, std::string_view sv);
     void record_samples(uint32_t ch, size_t count, const TxMetadata& meta);
 
+    mutable std::mutex mutex_;
     std::string id_;
     DeviceCapabilities caps_;
     std::vector<DeviceCallRecord> calls_;

@@ -34,6 +34,7 @@ TEST_CASE("Waveform ref resolves named waveform correctly", "[parser][waveform_r
     auto errors = resolve_waveform_refs(*result);
     REQUIRE(errors.empty());
     REQUIRE(result->emitters[0].waveform.has_value());
+    REQUIRE_FALSE(result->emitters[0].waveform_ref.has_value());
     REQUIRE(result->emitters[0].waveform->type == WaveformType::Noise);
     REQUIRE(result->emitters[0].waveform->params["amplitude"].get<double>() == 0.15);
 }
@@ -70,6 +71,8 @@ TEST_CASE("Multiple waveform refs resolve independently", "[parser][waveform_ref
     REQUIRE(errors.empty());
     REQUIRE(result->emitters[0].waveform->type == WaveformType::CW);
     REQUIRE(result->emitters[1].waveform->type == WaveformType::Noise);
+    REQUIRE_FALSE(result->emitters[0].waveform_ref.has_value());
+    REQUIRE_FALSE(result->emitters[1].waveform_ref.has_value());
 }
 
 TEST_CASE("Emitter with both waveform and waveform_ref keeps inline", "[parser][waveform_ref]") {

@@ -2,6 +2,9 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cmath>
+#include <exception>
+#include <stdexcept>
 #include <thread>
 
 namespace archerfish::runtime {
@@ -10,7 +13,17 @@ TxWorker::TxWorker(SampleQueue& input_queue, hal::IHalDevice& device, uint32_t c
                    std::stop_source stop_src)
     : queue_(input_queue), device_(device), channel_(channel), stop_source_(std::move(stop_src)) {}
 
+TxWorker::~TxWorker() {
+    if (thread_.joinable()) {
+        request_stop();
+    }
+    join();
+}
+
 void TxWorker::start() {
+    if (thread_.joinable()) {
+        throw std::logic_error("TxWorker is already running");
+    }
     metrics_.active.store(true, std::memory_order_release);
     thread_ = std::thread(&TxWorker::run, this);
 }
@@ -46,18 +59,43 @@ void TxWorker::run() {
         meta.end_of_burst = block->end_of_burst;
         meta.has_time_spec = block->has_time_spec;
         meta.time_spec_sec = block->time_spec_sec;
+        if (meta.has_time_spec && !std::isfinite(meta.time_spec_sec)) {
+            metrics_.underruns.fetch_add(1, std::memory_order_relaxed);
+            metrics_.failed.store(true, std::memory_order_release);
+            request_stop();
+            spdlog::error("TX worker received non-finite time spec on channel {}", channel_);
+            break;
+        }
 
         auto sz = block->samples.size();
         size_t actually_sent = 0;
         if (!block->samples.empty()) {
-            actually_sent = device_.send_samples(channel_, block->samples.data(),
-                                 sz, meta);
+            try {
+                actually_sent = device_.send_samples(channel_, block->samples.data(), sz, meta);
+            } catch (const std::exception& e) {
+                metrics_.failed.store(true, std::memory_order_release);
+                request_stop();
+                spdlog::error("TX worker failed to send samples on channel {}: {}", channel_, e.what());
+                break;
+            } catch (...) {
+                metrics_.failed.store(true, std::memory_order_release);
+                request_stop();
+                spdlog::error("TX worker failed to send samples on channel {} with an unknown error", channel_);
+                break;
+            }
+        }
+        const bool partial_send = !block->samples.empty() && actually_sent != sz;
+        if (partial_send) {
+            metrics_.underruns.fetch_add(1, std::memory_order_relaxed);
+            metrics_.failed.store(true, std::memory_order_release);
+            request_stop();
+            spdlog::warn("TX worker sent {}/{} samples on channel {}", actually_sent, sz, channel_);
         }
 
         metrics_.samples_sent.fetch_add(actually_sent, std::memory_order_relaxed);
         metrics_.blocks_sent.fetch_add(1, std::memory_order_relaxed);
 
-        if (block->end_of_burst) {
+        if (block->end_of_burst || partial_send) {
             break;
         }
     }

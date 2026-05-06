@@ -53,16 +53,71 @@ TEST_CASE("SourceBase compute_block_size returns 0 when all produced", "[source_
     CHECK(src.compute_block_size(100) == 1);
 }
 
+TEST_CASE("SourceBase rejects duration sample count overflow", "[source_base]") {
+    TestSource src;
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e308}, {"duration_sec", 1e308}}), std::overflow_error);
+    CHECK_THROWS_AS(src.configure({
+                        {"sample_rate", static_cast<double>(std::numeric_limits<size_t>::max())},
+                        {"duration_sec", 2.0},
+                    }),
+                    std::overflow_error);
+}
+
+TEST_CASE("SourceBase checked_sample_count rounds and validates", "[source_base]") {
+    CHECK(archerfish::dsp::SourceBase::checked_sample_count(1000.0, 0.0014) == 1);
+    CHECK(archerfish::dsp::SourceBase::checked_sample_count(1000.0, 0.0015) == 2);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::checked_sample_count(0.0, 1.0), std::invalid_argument);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::checked_sample_count(1.0, -1.0), std::invalid_argument);
+}
+
+TEST_CASE("SourceBase checked_positive_rounded_count validates range", "[source_base]") {
+    CHECK(archerfish::dsp::SourceBase::checked_positive_rounded_count(1.4, "count") == 1);
+    CHECK(archerfish::dsp::SourceBase::checked_positive_rounded_count(1.5, "count") == 2);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::checked_positive_rounded_count(0.0, "count"),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::checked_positive_rounded_count(0.49, "count"),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::checked_positive_rounded_count(
+                        std::numeric_limits<double>::infinity(), "count"),
+                    std::overflow_error);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::checked_positive_rounded_count(
+                        std::numeric_limits<double>::quiet_NaN(), "count"),
+                    std::invalid_argument);
+}
+
 TEST_CASE("SourceBase validate_positive throws on zero and negative", "[source_base]") {
     CHECK_THROWS_AS(archerfish::dsp::SourceBase::validate_positive(0.0, "test"), std::invalid_argument);
     CHECK_THROWS_AS(archerfish::dsp::SourceBase::validate_positive(-1.0, "test"), std::invalid_argument);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::validate_positive(std::numeric_limits<double>::quiet_NaN(), "test"), std::invalid_argument);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::validate_positive(std::numeric_limits<double>::infinity(), "test"), std::invalid_argument);
     CHECK_NOTHROW(archerfish::dsp::SourceBase::validate_positive(0.001, "test"));
 }
 
 TEST_CASE("SourceBase validate_non_negative throws on negative", "[source_base]") {
     CHECK_THROWS_AS(archerfish::dsp::SourceBase::validate_non_negative(-0.001, "test"), std::invalid_argument);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::validate_non_negative(std::numeric_limits<double>::quiet_NaN(), "test"), std::invalid_argument);
+    CHECK_THROWS_AS(archerfish::dsp::SourceBase::validate_non_negative(std::numeric_limits<double>::infinity(), "test"), std::invalid_argument);
     CHECK_NOTHROW(archerfish::dsp::SourceBase::validate_non_negative(0.0, "test"));
     CHECK_NOTHROW(archerfish::dsp::SourceBase::validate_non_negative(1.0, "test"));
+}
+
+TEST_CASE("SourceBase configure_common rejects invalid common fields", "[source_base]") {
+    TestSource src;
+    CHECK_THROWS_AS(src.configure(nullptr), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure(nlohmann::json::array()), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure("sample_rate=1e6"), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"amplitude", "loud"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", "fast"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"duration_sec", "long"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 0.0}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", std::numeric_limits<double>::quiet_NaN()}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"amplitude", -0.1}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"amplitude", static_cast<double>(std::numeric_limits<float>::max()) * 2.0}}),
+                    std::out_of_range);
+    CHECK_THROWS_AS(src.configure({{"duration_sec", -0.001}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"seed", -1}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"seed", 1.5}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"seed", 4294967296}}), std::out_of_range);
 }
 
 TEST_CASE("SourceBase configure_common extracts fields", "[source_base]") {
@@ -79,6 +134,33 @@ TEST_CASE("SourceBase configure_common extracts fields", "[source_base]") {
     CHECK_THAT(src.sample_rate(), WithinAbs(2e6, 1e-6));
     CHECK(src.samples_produced() == 0);
     CHECK(src.seed() == 123);
+}
+
+TEST_CASE("SourceBase configure_common does not partially commit invalid updates", "[source_base]") {
+    TestSource src;
+    src.configure({
+        {"amplitude", 0.5},
+        {"sample_rate", 2e6},
+        {"duration_sec", 0.01},
+        {"seed", 123u},
+    });
+
+    CHECK_THROWS_AS(src.configure({
+                        {"amplitude", 0.9},
+                        {"sample_rate", 3e6},
+                        {"duration_sec", -1.0},
+                        {"seed", 456u},
+                    }),
+                    std::invalid_argument);
+
+    CHECK_THAT(src.amplitude(), WithinAbs(0.5, 1e-12));
+    CHECK_THAT(src.sample_rate(), WithinAbs(2e6, 1e-6));
+    CHECK(src.seed() == 123u);
+
+    archerfish::dsp::WaveformMetadata meta;
+    src.fill_common_metadata(meta);
+    REQUIRE(meta.duration_sec.has_value());
+    CHECK_THAT(meta.duration_sec.value(), WithinAbs(0.01, 1e-12));
 }
 
 TEST_CASE("SourceBase fill_common_metadata populates correctly", "[source_base]") {

@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/common/constants.hpp"
@@ -38,6 +39,15 @@ TEST_CASE("compute_ratio throws on zero", "[dsp][resampler]") {
     REQUIRE_THROWS_AS(compute_ratio(48000.0, 0.0), std::invalid_argument);
 }
 
+TEST_CASE("compute_ratio rejects non-finite rates and zero denominator bound", "[dsp][resampler]") {
+    REQUIRE_THROWS_AS(compute_ratio(std::numeric_limits<double>::quiet_NaN(), 44100.0),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(compute_ratio(48000.0, std::numeric_limits<double>::infinity()),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(compute_ratio(48000.0, 44100.0, 0),
+                      std::invalid_argument);
+}
+
 TEST_CASE("compute_ratio respects max_denominator", "[dsp][resampler]") {
     auto [l, m] = compute_ratio(48000.0, 44100.0, 10);
     REQUIRE(m <= 10);
@@ -52,6 +62,12 @@ TEST_CASE("compute_ratio respects max_denominator", "[dsp][resampler]") {
     }
     double actual_err = std::abs(exact_ratio - approx_ratio);
     REQUIRE(actual_err <= best_err + 1e-12);
+}
+
+TEST_CASE("compute_ratio keeps tiny positive ratios representable", "[dsp][resampler]") {
+    auto [l, m] = compute_ratio(1.0, 1.0e20, 1000);
+    REQUIRE(l == 1);
+    REQUIRE(m == 1000);
 }
 
 TEST_CASE("ResamplerBlock identity passthrough", "[dsp][resampler]") {
@@ -176,11 +192,42 @@ TEST_CASE("ResamplerBlock streaming equals batch", "[dsp][resampler]") {
     }
 }
 
+TEST_CASE("ResamplerBlock rejects null buffers for nonzero work", "[dsp][resampler]") {
+    ResamplerBlock rs(1, 1);
+    std::vector<std::complex<float>> in(4, {1.0f, 0.0f});
+    std::vector<std::complex<float>> out(8);
+
+    REQUIRE_THROWS_AS(rs.process(nullptr, in.size()), std::invalid_argument);
+    REQUIRE_THROWS_AS(rs.process(nullptr, in.size(), out.data(), out.size()), std::invalid_argument);
+    REQUIRE_THROWS_AS(rs.process(in.data(), in.size(), nullptr, out.size()), std::invalid_argument);
+}
+
+TEST_CASE("ResamplerBlock streaming zero output capacity produces no samples", "[dsp][resampler]") {
+    ResamplerBlock rs(1, 1);
+    std::vector<std::complex<float>> in(4, {1.0f, 0.0f});
+    std::complex<float> dummy{};
+
+    REQUIRE(rs.process(in.data(), in.size(), &dummy, 0) == 0);
+}
+
+TEST_CASE("ResamplerBlock batch rejects unrepresentable output size", "[dsp][resampler]") {
+    ResamplerBlock rs(std::numeric_limits<unsigned>::max(), 1);
+    std::vector<std::complex<float>> in(4, {1.0f, 0.0f});
+
+    REQUIRE_THROWS_AS(rs.process(in.data(), in.size()), std::invalid_argument);
+}
+
 TEST_CASE("ResamplerBlock estimated_output_size", "[dsp][resampler]") {
     ResamplerBlock rs(7, 3);
     size_t est = rs.estimated_output_size(100);
     size_t expected_min = static_cast<size_t>(100.0 * 7.0 / 3.0);
     REQUIRE(est >= expected_min);
+}
+
+TEST_CASE("ResamplerBlock estimated_output_size detects overflow", "[dsp][resampler]") {
+    ResamplerBlock rs(std::numeric_limits<unsigned>::max(), 1);
+    REQUIRE_THROWS_AS(rs.estimated_output_size(std::numeric_limits<size_t>::max()),
+                      std::overflow_error);
 }
 
 TEST_CASE("ResamplerBlock accessors", "[dsp][resampler]") {

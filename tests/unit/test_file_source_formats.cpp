@@ -3,7 +3,10 @@
 
 #include <cmath>
 #include <complex>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -15,10 +18,32 @@ using Catch::Matchers::WithinAbs;
 static const char* kTempDir = "/tmp/archerfish_test";
 
 static std::string write_cf32_file(const std::string& name, const std::vector<std::complex<float>>& data) {
+    std::filesystem::create_directories(kTempDir);
     std::string path = std::string(kTempDir) + "/" + name;
     std::ofstream ofs(path, std::ios::binary);
+    if (!ofs) {
+        throw std::runtime_error("Cannot open test CF32 file for writing: " + path);
+    }
     ofs.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(std::complex<float>));
     ofs.close();
+    if (!ofs) {
+        throw std::runtime_error("Failed to write test CF32 file: " + path);
+    }
+    return path;
+}
+
+static std::string write_raw_file(const std::string& name, const std::vector<char>& data) {
+    std::filesystem::create_directories(kTempDir);
+    std::string path = std::string(kTempDir) + "/" + name;
+    std::ofstream ofs(path, std::ios::binary);
+    if (!ofs) {
+        throw std::runtime_error("Cannot open test raw file for writing: " + path);
+    }
+    ofs.write(data.data(), static_cast<std::streamsize>(data.size()));
+    ofs.close();
+    if (!ofs) {
+        throw std::runtime_error("Failed to write test raw file: " + path);
+    }
     return path;
 }
 
@@ -118,6 +143,26 @@ TEST_CASE("File source reset restarts from beginning", "[dsp][file_source][forma
     cleanup(path);
 }
 
+TEST_CASE("File source rejects partial sample files", "[dsp][file_source][formats]") {
+    auto cf32_path = write_raw_file("partial.cf32", {'a', 'b', 'c'});
+    FileSource cf32_src;
+    cf32_src.configure({{"path", cf32_path}, {"sample_rate", 1e6}});
+    cf32_src.prepare();
+
+    std::vector<std::complex<float>> buf(4);
+    REQUIRE(cf32_src.render_block(buf.data(), buf.size()) == 0);
+    cleanup(cf32_path);
+
+    const std::vector<char> ci16_bytes(2 * sizeof(int16_t) + 1, '\0');
+    auto ci16_path = write_raw_file("partial.ci16", ci16_bytes);
+    FileSource ci16_src;
+    ci16_src.configure({{"path", ci16_path}, {"sample_rate", 1e6}});
+    ci16_src.prepare();
+
+    REQUIRE(ci16_src.render_block(buf.data(), buf.size()) == 0);
+    cleanup(ci16_path);
+}
+
 TEST_CASE("File source with large file", "[dsp][file_source][formats]") {
     const size_t N = 100000;
     std::vector<std::complex<float>> data(N, {0.5f, -0.5f});
@@ -135,4 +180,36 @@ TEST_CASE("File source with large file", "[dsp][file_source][formats]") {
     REQUIRE(n2 == 50000);
 
     cleanup(path);
+}
+
+TEST_CASE("File source rejects oversized files before allocation", "[dsp][file_source][formats]") {
+    std::filesystem::create_directories(kTempDir);
+    constexpr std::uintmax_t too_many_samples = 16'000'001;
+
+    const std::string cf32_path = std::string(kTempDir) + "/oversized.cf32";
+    cleanup(cf32_path);
+    std::ofstream(cf32_path, std::ios::binary).close();
+    std::filesystem::resize_file(cf32_path,
+                                 too_many_samples * sizeof(std::complex<float>));
+
+    FileSource cf32_src;
+    cf32_src.configure({{"path", cf32_path}, {"sample_rate", 1e6}});
+    cf32_src.prepare();
+
+    std::vector<std::complex<float>> buf(4);
+    CHECK(cf32_src.render_block(buf.data(), buf.size()) == 0);
+    cleanup(cf32_path);
+
+    const std::string ci16_path = std::string(kTempDir) + "/oversized.ci16";
+    cleanup(ci16_path);
+    std::ofstream(ci16_path, std::ios::binary).close();
+    std::filesystem::resize_file(ci16_path,
+                                 too_many_samples * 2 * sizeof(int16_t));
+
+    FileSource ci16_src;
+    ci16_src.configure({{"path", ci16_path}, {"sample_rate", 1e6}});
+    ci16_src.prepare();
+
+    CHECK(ci16_src.render_block(buf.data(), buf.size()) == 0);
+    cleanup(ci16_path);
 }

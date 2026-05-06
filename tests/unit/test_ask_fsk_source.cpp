@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <set>
 #include <vector>
 
@@ -98,6 +99,82 @@ TEST_CASE("ASK seeded reproducibility", "[dsp][ask]") {
     }
 }
 
+TEST_CASE("ASK rejects invalid modulation parameters", "[dsp][ask]") {
+    AskSource src;
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"frequency_hz", "high"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", "fast"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 0.0}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"frequency_hz", std::numeric_limits<double>::quiet_NaN()}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 100e3}, {"num_levels", "many"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 100e3}, {"num_levels", 2.5}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 100e3}, {"num_levels", 1}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 100e3}, {"num_levels", 1025}}), std::invalid_argument);
+}
+
+TEST_CASE("ASK keeps prior configuration after invalid reconfigure", "[dsp][ask]") {
+    AskSource src;
+    src.configure({{"amplitude", 0.2},
+                   {"frequency_hz", 0.0},
+                   {"sample_rate", 1e6},
+                   {"symbol_rate", 100e3},
+                   {"num_levels", 2},
+                   {"seed", 42}});
+
+    CHECK_THROWS_AS(src.configure({{"amplitude", 0.8},
+                                   {"frequency_hz", 10e3},
+                                   {"sample_rate", 2e6},
+                                   {"symbol_rate", 200e3},
+                                   {"num_levels", 1}}),
+                    std::invalid_argument);
+
+    auto meta = src.report_metadata();
+    REQUIRE_THAT(meta.sample_rate, WithinAbs(1e6, 1e-9));
+    REQUIRE_THAT(meta.nominal_bandwidth, WithinAbs(100e3, 1e-9));
+    REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.2 * std::sqrt(2.0), 1e-9));
+}
+
+TEST_CASE("ASK render validates output buffer and sample-rate relationship", "[dsp][ask]") {
+    AskSource src;
+    src.configure({{"amplitude", 0.2},
+                   {"frequency_hz", 0.0},
+                   {"sample_rate", 1e6},
+                   {"symbol_rate", 100e3},
+                   {"num_levels", 2},
+                   {"seed", 42}});
+    src.prepare();
+
+    CHECK(src.render_block(nullptr, 0) == 0);
+    CHECK_THROWS_AS(src.render_block(nullptr, 1), std::invalid_argument);
+
+    AskSource too_fast;
+    too_fast.configure({{"sample_rate", 1e6}, {"symbol_rate", 3e6}});
+    CHECK_THROWS_AS(too_fast.prepare(), std::invalid_argument);
+
+    AskSource too_slow;
+    too_slow.configure({{"sample_rate", std::numeric_limits<double>::max()}, {"symbol_rate", 0.5}});
+    CHECK_THROWS_AS(too_slow.prepare(), std::overflow_error);
+}
+
+TEST_CASE("ASK reconfigure invalidates prepared symbol state", "[dsp][ask]") {
+    AskSource src;
+    src.configure({{"amplitude", 0.2},
+                   {"frequency_hz", 0.0},
+                   {"sample_rate", 1e6},
+                   {"symbol_rate", 100e3},
+                   {"num_levels", 2},
+                   {"seed", 42}});
+    src.prepare();
+
+    std::vector<std::complex<float>> buf(10);
+    REQUIRE(src.render_block(buf.data(), buf.size()) == 10);
+
+    src.configure({{"sample_rate", 1e6}, {"symbol_rate", 50e3}, {"num_levels", 4}});
+    CHECK_THROWS_AS(src.render_block(buf.data(), buf.size()), std::logic_error);
+
+    src.prepare();
+    REQUIRE(src.render_block(buf.data(), buf.size()) == 10);
+}
+
 TEST_CASE("ASK block boundary across symbol", "[dsp][ask]") {
     AskSource src;
     double fs = 1e6;
@@ -128,6 +205,27 @@ TEST_CASE("ASK block boundary across symbol", "[dsp][ask]") {
         REQUIRE_THAT(split[i].real(), WithinAbs(all[i].real(), 1e-6f));
         REQUIRE_THAT(split[i].imag(), WithinAbs(all[i].imag(), 1e-6f));
     }
+}
+
+TEST_CASE("ASK wraps high carrier phase modulo one cycle", "[dsp][ask]") {
+    AskSource src;
+    src.configure({{"amplitude", 1.0},
+                   {"frequency_hz", 2.5e6},
+                   {"sample_rate", 1e6},
+                   {"symbol_rate", 1e3},
+                   {"num_levels", 4},
+                   {"seed", 42}});
+    src.prepare();
+
+    std::vector<std::complex<float>> buf(4);
+    REQUIRE(src.render_block(buf.data(), buf.size()) == buf.size());
+
+    REQUIRE_THAT(buf[2].real(), WithinAbs(buf[0].real(), 1e-5f));
+    REQUIRE_THAT(buf[2].imag(), WithinAbs(buf[0].imag(), 1e-5f));
+    REQUIRE_THAT(buf[1].real(), WithinAbs(-buf[0].real(), 1e-5f));
+    REQUIRE_THAT(buf[1].imag(), WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(buf[3].real(), WithinAbs(buf[1].real(), 1e-5f));
+    REQUIRE_THAT(buf[3].imag(), WithinAbs(0.0f, 1e-5f));
 }
 
 TEST_CASE("FSK M=2 produces frequency changes between symbols", "[dsp][fsk]") {
@@ -216,6 +314,88 @@ TEST_CASE("FSK seeded reproducibility", "[dsp][fsk]") {
         REQUIRE_THAT(buf1[i].real(), WithinAbs(buf2[i].real(), 1e-6f));
         REQUIRE_THAT(buf1[i].imag(), WithinAbs(buf2[i].imag(), 1e-6f));
     }
+}
+
+TEST_CASE("FSK rejects invalid modulation parameters", "[dsp][fsk]") {
+    FskSource src;
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"center_frequency_hz", "high"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", "fast"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"deviation_hz", "wide"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 0.0}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"center_frequency_hz", std::numeric_limits<double>::infinity()}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 10e3}, {"modulation_order", "many"}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 10e3}, {"modulation_order", 2.5}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 10e3}, {"modulation_order", 1}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 10e3}, {"modulation_order", 1025}}), std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"sample_rate", 1e6}, {"symbol_rate", 10e3}, {"deviation_hz", -1.0}}), std::invalid_argument);
+}
+
+TEST_CASE("FSK keeps prior configuration after invalid reconfigure", "[dsp][fsk]") {
+    FskSource src;
+    src.configure({{"amplitude", 0.2},
+                   {"center_frequency_hz", 0.0},
+                   {"sample_rate", 1e6},
+                   {"symbol_rate", 10e3},
+                   {"modulation_order", 4},
+                   {"deviation_hz", 50e3},
+                   {"seed", 77}});
+
+    CHECK_THROWS_AS(src.configure({{"amplitude", 0.8},
+                                   {"center_frequency_hz", 10e3},
+                                   {"sample_rate", 2e6},
+                                   {"symbol_rate", 20e3},
+                                   {"modulation_order", 8},
+                                   {"deviation_hz", -1.0}}),
+                    std::invalid_argument);
+
+    auto meta = src.report_metadata();
+    REQUIRE_THAT(meta.sample_rate, WithinAbs(1e6, 1e-9));
+    REQUIRE_THAT(meta.peak_amplitude, WithinAbs(0.2, 1e-9));
+    REQUIRE_THAT(meta.nominal_bandwidth, WithinAbs(110e3, 1e-9));
+}
+
+TEST_CASE("FSK render validates output buffer and sample-rate relationship", "[dsp][fsk]") {
+    FskSource src;
+    src.configure({{"amplitude", 0.2},
+                   {"center_frequency_hz", 0.0},
+                   {"sample_rate", 1e6},
+                   {"symbol_rate", 100e3},
+                   {"modulation_order", 2},
+                   {"deviation_hz", 10e3},
+                   {"seed", 42}});
+    src.prepare();
+
+    CHECK(src.render_block(nullptr, 0) == 0);
+    CHECK_THROWS_AS(src.render_block(nullptr, 1), std::invalid_argument);
+
+    FskSource too_fast;
+    too_fast.configure({{"sample_rate", 1e6}, {"symbol_rate", 3e6}});
+    CHECK_THROWS_AS(too_fast.prepare(), std::invalid_argument);
+
+    FskSource too_slow;
+    too_slow.configure({{"sample_rate", std::numeric_limits<double>::max()}, {"symbol_rate", 0.5}});
+    CHECK_THROWS_AS(too_slow.prepare(), std::overflow_error);
+}
+
+TEST_CASE("FSK reconfigure invalidates prepared symbol state", "[dsp][fsk]") {
+    FskSource src;
+    src.configure({{"amplitude", 0.2},
+                   {"center_frequency_hz", 0.0},
+                   {"sample_rate", 1e6},
+                   {"symbol_rate", 100e3},
+                   {"modulation_order", 2},
+                   {"deviation_hz", 10e3},
+                   {"seed", 42}});
+    src.prepare();
+
+    std::vector<std::complex<float>> buf(10);
+    REQUIRE(src.render_block(buf.data(), buf.size()) == 10);
+
+    src.configure({{"sample_rate", 1e6}, {"symbol_rate", 50e3}, {"modulation_order", 4}});
+    CHECK_THROWS_AS(src.render_block(buf.data(), buf.size()), std::logic_error);
+
+    src.prepare();
+    REQUIRE(src.render_block(buf.data(), buf.size()) == 10);
 }
 
 TEST_CASE("FSK block boundary across symbol", "[dsp][fsk]") {

@@ -32,7 +32,6 @@ add_test(NAME unit_error COMMAND test_error)
 add_executable(test_rf_types test_rf_types.cpp)
 target_link_libraries(test_rf_types
     PRIVATE
-        archerfish_common
         archerfish_scheduler
         Catch2::Catch2WithMain
 )
@@ -363,7 +362,7 @@ add_test(NAME unit_emitter_metrics COMMAND test_emitter_metrics)
 add_executable(test_dryrun test_dryrun.cpp)
 target_link_libraries(test_dryrun
     PRIVATE
-        archerfish_scheduler
+        archerfish_cli
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_dryrun COMMAND test_dryrun)
@@ -540,7 +539,6 @@ add_test(NAME unit_pa_nonlinearity COMMAND test_pa_nonlinearity)
 add_executable(test_scheduled_impairment test_scheduled_impairment.cpp)
 target_link_libraries(test_scheduled_impairment
     PRIVATE
-        archerfish_scheduler
         archerfish_impairments
         Catch2::Catch2WithMain
 )
@@ -551,9 +549,7 @@ add_test(NAME unit_scheduled_impairment COMMAND test_scheduled_impairment)
 add_executable(test_event_extensions test_event_extensions.cpp)
 target_link_libraries(test_event_extensions
     PRIVATE
-        archerfish_scheduler
         archerfish_runtime
-        archerfish_impairments
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_event_extensions COMMAND test_event_extensions)
@@ -912,7 +908,6 @@ add_executable(test_runtime_lifecycle test_runtime_lifecycle.cpp)
 target_link_libraries(test_runtime_lifecycle
     PRIVATE
         archerfish_runtime
-        archerfish_hal
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_runtime_lifecycle COMMAND test_runtime_lifecycle)
@@ -921,7 +916,6 @@ add_executable(test_runtime_multi_channel test_runtime_multi_channel.cpp)
 target_link_libraries(test_runtime_multi_channel
     PRIVATE
         archerfish_runtime
-        archerfish_hal
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_runtime_multi_channel COMMAND test_runtime_multi_channel)
@@ -966,7 +960,6 @@ add_executable(test_impairment_pipeline test_impairment_pipeline.cpp)
 target_link_libraries(test_impairment_pipeline
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_impairment_pipeline COMMAND test_impairment_pipeline)
@@ -987,7 +980,6 @@ add_executable(test_cfo_standalone test_cfo_standalone.cpp)
 target_link_libraries(test_cfo_standalone
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_cfo_standalone COMMAND test_cfo_standalone)
@@ -996,7 +988,6 @@ add_executable(test_awgn_standalone test_awgn_standalone.cpp)
 target_link_libraries(test_awgn_standalone
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_awgn_standalone COMMAND test_awgn_standalone)
@@ -1005,7 +996,6 @@ add_executable(test_phase_offset_standalone test_phase_offset_standalone.cpp)
 target_link_libraries(test_phase_offset_standalone
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_phase_offset_standalone COMMAND test_phase_offset_standalone)
@@ -1014,7 +1004,6 @@ add_executable(test_iq_imbalance_standalone test_iq_imbalance_standalone.cpp)
 target_link_libraries(test_iq_imbalance_standalone
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_iq_imbalance_standalone COMMAND test_iq_imbalance_standalone)
@@ -1023,7 +1012,6 @@ add_executable(test_dc_offset_standalone test_dc_offset_standalone.cpp)
 target_link_libraries(test_dc_offset_standalone
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_dc_offset_standalone COMMAND test_dc_offset_standalone)
@@ -1032,7 +1020,6 @@ add_executable(test_amplitude_ripple_standalone test_amplitude_ripple_standalone
 target_link_libraries(test_amplitude_ripple_standalone
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_amplitude_ripple_standalone COMMAND test_amplitude_ripple_standalone)
@@ -1041,7 +1028,6 @@ add_executable(test_delay_standalone test_delay_standalone.cpp)
 target_link_libraries(test_delay_standalone
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_delay_standalone COMMAND test_delay_standalone)
@@ -1050,7 +1036,6 @@ add_executable(test_burst_dropout_standalone test_burst_dropout_standalone.cpp)
 target_link_libraries(test_burst_dropout_standalone
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_burst_dropout_standalone COMMAND test_burst_dropout_standalone)
@@ -1061,7 +1046,6 @@ add_executable(test_impairment_chain_ordering test_impairment_chain_ordering.cpp
 target_link_libraries(test_impairment_chain_ordering
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_impairment_chain_ordering COMMAND test_impairment_chain_ordering)
@@ -1070,7 +1054,6 @@ add_executable(test_impairment_enable_disable test_impairment_enable_disable.cpp
 target_link_libraries(test_impairment_enable_disable
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_impairment_enable_disable COMMAND test_impairment_enable_disable)
@@ -1079,7 +1062,6 @@ add_executable(test_phase_noise_parameters test_phase_noise_parameters.cpp)
 target_link_libraries(test_phase_noise_parameters
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_phase_noise_parameters COMMAND test_phase_noise_parameters)
@@ -1088,7 +1070,6 @@ add_executable(test_multipath_taps test_multipath_taps.cpp)
 target_link_libraries(test_multipath_taps
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_multipath_taps COMMAND test_multipath_taps)
@@ -1097,7 +1078,6 @@ add_executable(test_fading_models test_fading_models.cpp)
 target_link_libraries(test_fading_models
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_fading_models COMMAND test_fading_models)
@@ -1106,7 +1086,6 @@ add_executable(test_pa_rapp_vs_saleh test_pa_rapp_vs_saleh.cpp)
 target_link_libraries(test_pa_rapp_vs_saleh
     PRIVATE
         archerfish_impairments
-        archerfish_common
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_pa_rapp_vs_saleh COMMAND test_pa_rapp_vs_saleh)
@@ -1160,7 +1139,5 @@ target_link_libraries(test_validator_multi_emitter
         Catch2::Catch2WithMain
 )
 add_test(NAME unit_validator_multi_emitter COMMAND test_validator_multi_emitter)
-
-
 
 

@@ -100,3 +100,12 @@ TEST_CASE("Noise source metadata is consistent", "[dsp][noise][statistics]") {
     REQUIRE_THAT(meta.sample_rate, WithinAbs(2e6, 1e-9));
     REQUIRE(meta.repeats);
 }
+
+TEST_CASE("Noise source render validates output buffer", "[dsp][noise][statistics]") {
+    NoiseSource src;
+    src.configure({{"amplitude", 0.1}, {"sample_rate", 1e6}, {"seed", 42}});
+    src.prepare();
+
+    CHECK(src.render_block(nullptr, 0) == 0);
+    CHECK_THROWS_AS(src.render_block(nullptr, 1), std::invalid_argument);
+}

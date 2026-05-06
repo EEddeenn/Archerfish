@@ -1,6 +1,8 @@
 #include "archerfish/dsp/waveform_type.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cstring>
 
 namespace archerfish::dsp {
 
@@ -44,12 +46,21 @@ std::string to_string(WaveformType t) {
 }
 
 std::expected<WaveformType, std::string> waveform_type_from_string(std::string_view s) {
-    std::string lower(s);
-    std::transform(lower.begin(), lower.end(), lower.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::string lower;
+    lower.reserve(s.size());
+    for (unsigned char c : s) {
+        if (std::isspace(c) || c == '-' || c == '_') continue;
+        lower.push_back(static_cast<char>(std::tolower(c)));
+    }
 
     for (const auto& m : kMappings) {
-        if (lower == m.canonical) return m.type;
+        std::string canonical;
+        canonical.reserve(std::char_traits<char>::length(m.canonical));
+        for (unsigned char c : std::string_view(m.canonical)) {
+            if (c == '_') continue;
+            canonical.push_back(static_cast<char>(std::tolower(c)));
+        }
+        if (lower == canonical) return m.type;
     }
 
     if (lower == "psk8") return WaveformType::PSK8;

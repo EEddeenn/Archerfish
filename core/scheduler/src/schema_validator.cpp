@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <system_error>
 
 #include <nlohmann/json-schema.hpp>
 
@@ -19,7 +20,8 @@ std::filesystem::path find_schema_file() {
     #ifdef ARCHERFISH_INSTALL_DATADIR
     {
         auto installed = std::filesystem::path(ARCHERFISH_INSTALL_DATADIR) / "schemas" / "scenario.schema.json";
-        if (std::filesystem::exists(installed)) {
+        std::error_code fs_error;
+        if (std::filesystem::exists(installed, fs_error) && !fs_error) {
             return installed;
         }
     }

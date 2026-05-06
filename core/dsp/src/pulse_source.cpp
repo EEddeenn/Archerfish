@@ -3,38 +3,81 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
+#include <utility>
 
 #include "archerfish/common/constants.hpp"
 
 namespace archerfish::dsp {
 
 void PulseSource::configure(const nlohmann::json& params) {
-    configure_common(params);
-    if (params.contains("frequency_hz"))
-        frequency_hz_ = params["frequency_hz"].get<double>();
-    if (params.contains("pulse_width_sec"))
-        pulse_width_sec_ = params["pulse_width_sec"].get<double>();
-    if (params.contains("pri_sec"))
-        pri_sec_ = params["pri_sec"].get<double>();
+    double next_frequency_hz = frequency_hz_;
+    double next_pulse_width_sec = pulse_width_sec_;
+    double next_pri_sec = pri_sec_;
+    std::string next_mode = mode_;
+
+    if (params.contains("frequency_hz")) {
+        next_frequency_hz = number_param(params, "frequency_hz");
+        if (!std::isfinite(next_frequency_hz)) {
+            throw std::invalid_argument("frequency_hz must be finite");
+        }
+    }
+    if (params.contains("pulse_width_sec")) {
+        next_pulse_width_sec = number_param(params, "pulse_width_sec");
+        validate_positive(next_pulse_width_sec, "pulse_width_sec");
+    }
+    if (params.contains("pri_sec")) {
+        next_pri_sec = number_param(params, "pri_sec");
+        validate_positive(next_pri_sec, "pri_sec");
+    }
     if (params.contains("mode"))
-        mode_ = params["mode"].get<std::string>();
+        next_mode = string_param(params, "mode");
+
+    if (next_pulse_width_sec > next_pri_sec) {
+        throw std::invalid_argument("pulse_width_sec must not exceed pri_sec");
+    }
+    if (next_mode != "single" && next_mode != "train") {
+        throw std::invalid_argument("mode must be 'single' or 'train'");
+    }
+
+    configure_common(params);
+    frequency_hz_ = next_frequency_hz;
+    pulse_width_sec_ = next_pulse_width_sec;
+    pri_sec_ = next_pri_sec;
+    mode_ = std::move(next_mode);
+    pw_samples_ = 0;
+    pri_samples_ = 0;
+    phase_ = 0.0f;
+    pulse_done_ = false;
 }
 
 void PulseSource::prepare() {
-    pw_samples_ = static_cast<size_t>(std::round(pulse_width_sec_ * sample_rate_));
-    pri_samples_ = static_cast<size_t>(std::round(pri_sec_ * sample_rate_));
+    pw_samples_ = checked_sample_count(sample_rate_, pulse_width_sec_);
+    pri_samples_ = checked_sample_count(sample_rate_, pri_sec_);
+    if (pw_samples_ == 0) {
+        throw std::invalid_argument("pulse_width_sec is too small for sample_rate");
+    }
+    if (pri_samples_ == 0) {
+        throw std::invalid_argument("pri_sec is too small for sample_rate");
+    }
     phase_ = 0.0;
     reset_common();
     pulse_done_ = false;
 }
 
 size_t PulseSource::render_block(std::complex<float>* out, size_t max_samples) {
+    if (max_samples > 0 && out == nullptr) {
+        throw std::invalid_argument("PulseSource render output buffer must not be null");
+    }
     if (pulse_done_)
         return 0;
+    if (max_samples > 0 && (pw_samples_ == 0 || pri_samples_ == 0)) {
+        throw std::logic_error("PulseSource must be prepared before rendering");
+    }
 
     size_t total_available = std::numeric_limits<size_t>::max();
     if (duration_sec_.has_value()) {
-        size_t total_samples = static_cast<size_t>(std::round(duration_sec_.value() * sample_rate_));
+        size_t total_samples = checked_sample_count(sample_rate_, duration_sec_.value());
         if (samples_produced_ >= total_samples)
             return 0;
         total_available = total_samples - samples_produced_;
@@ -58,7 +101,8 @@ size_t PulseSource::render_block(std::complex<float>* out, size_t max_samples) {
         }
 
         phase_ += phase_inc;
-        if (phase_ >= two_pi) phase_ -= two_pi;
+        phase_ = std::fmod(phase_, two_pi);
+        if (phase_ < 0.0) phase_ += two_pi;
     }
 
     samples_produced_ += to_generate;

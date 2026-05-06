@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cmath>
+#include <limits>
 #include <numeric>
 #include <samplerate.h>
 #include <stdexcept>
@@ -11,6 +13,8 @@
 namespace archerfish::dsp {
 
 namespace {
+
+constexpr size_t kMaxBatchOutputSamples = 16'000'000;
 
 unsigned gcd_unsigned(unsigned a, unsigned b) {
     while (b != 0) {
@@ -21,6 +25,21 @@ unsigned gcd_unsigned(unsigned a, unsigned b) {
     return a;
 }
 
+size_t checked_output_capacity(size_t n_in, double src_ratio, size_t slack) {
+    if (!std::isfinite(src_ratio) || src_ratio <= 0.0) {
+        throw std::invalid_argument("ResamplerBlock::process: ratio must be finite and positive");
+    }
+    const long double required = static_cast<long double>(n_in) * static_cast<long double>(src_ratio) +
+                                 static_cast<long double>(slack);
+    const long double size_limit = static_cast<long double>(std::numeric_limits<size_t>::max());
+    const long double frame_limit = static_cast<long double>(std::numeric_limits<long>::max());
+    if (required > size_limit || required > frame_limit ||
+        required > static_cast<long double>(kMaxBatchOutputSamples)) {
+        throw std::invalid_argument("ResamplerBlock::process: output buffer size is too large");
+    }
+    return static_cast<size_t>(required);
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -28,10 +47,18 @@ unsigned gcd_unsigned(unsigned a, unsigned b) {
 // ---------------------------------------------------------------------------
 std::pair<unsigned, unsigned> compute_ratio(double target_rate, double source_rate,
                                             unsigned max_denominator) {
-    if (source_rate <= 0.0 || target_rate <= 0.0)
-        throw std::invalid_argument("compute_ratio: rates must be positive");
+    if (!std::isfinite(source_rate) || !std::isfinite(target_rate) ||
+        source_rate <= 0.0 || target_rate <= 0.0) {
+        throw std::invalid_argument("compute_ratio: rates must be finite and positive");
+    }
+    if (max_denominator == 0) {
+        throw std::invalid_argument("compute_ratio: max_denominator must be nonzero");
+    }
 
     double x = target_rate / source_rate;
+    if (x > static_cast<double>(std::numeric_limits<unsigned>::max())) {
+        throw std::invalid_argument("compute_ratio: ratio is too large");
+    }
 
     unsigned h_prev2 = 0, k_prev2 = 1;
     unsigned h_prev1 = 1, k_prev1 = 0;
@@ -42,22 +69,45 @@ std::pair<unsigned, unsigned> compute_ratio(double target_rate, double source_ra
         double q_d = std::floor(remainder);
         if (q_d + 1.0 - remainder < 1e-8)
             q_d += 1.0;
+        if (q_d > static_cast<double>(std::numeric_limits<unsigned>::max())) {
+            if (k_prev1 > 0) {
+                const unsigned max_q = (max_denominator - k_prev2) / k_prev1;
+                if (max_q > 0) {
+                    const uint64_t sh = static_cast<uint64_t>(max_q) * h_prev1 + h_prev2;
+                    const uint64_t sk = static_cast<uint64_t>(max_q) * k_prev1 + k_prev2;
+                    if (sh <= std::numeric_limits<unsigned>::max() &&
+                        sk <= max_denominator && sk > 0) {
+                        h_prev1 = static_cast<unsigned>(sh);
+                        k_prev1 = static_cast<unsigned>(sk);
+                    }
+                }
+            }
+            break;
+        }
+
         unsigned q = static_cast<unsigned>(q_d);
 
-        unsigned h = q * h_prev1 + h_prev2;
-        unsigned k = q * k_prev1 + k_prev2;
+        const uint64_t h_wide = static_cast<uint64_t>(q) * h_prev1 + h_prev2;
+        const uint64_t k_wide = static_cast<uint64_t>(q) * k_prev1 + k_prev2;
+        if (h_wide > std::numeric_limits<unsigned>::max() ||
+            k_wide > std::numeric_limits<unsigned>::max()) {
+            break;
+        }
+        unsigned h = static_cast<unsigned>(h_wide);
+        unsigned k = static_cast<unsigned>(k_wide);
 
         if (k > max_denominator) {
             if (q > 0 && k_prev1 > 0) {
                 unsigned max_q = (max_denominator - k_prev2) / k_prev1;
                 if (max_q > 0) {
-                    unsigned sh = max_q * h_prev1 + h_prev2;
-                    unsigned sk = max_q * k_prev1 + k_prev2;
-                    if (sk <= max_denominator && sk > 0) {
+                    const uint64_t sh = static_cast<uint64_t>(max_q) * h_prev1 + h_prev2;
+                    const uint64_t sk = static_cast<uint64_t>(max_q) * k_prev1 + k_prev2;
+                    if (sh <= std::numeric_limits<unsigned>::max() &&
+                        sk <= max_denominator && sk > 0) {
                         h_prev2 = h_prev1;
                         k_prev2 = k_prev1;
-                        h_prev1 = sh;
-                        k_prev1 = sk;
+                        h_prev1 = static_cast<unsigned>(sh);
+                        k_prev1 = static_cast<unsigned>(sk);
                     }
                 }
             }
@@ -74,6 +124,11 @@ std::pair<unsigned, unsigned> compute_ratio(double target_rate, double source_ra
         if (frac < 1e-8)
             break;
         remainder = 1.0 / frac;
+    }
+
+    if (h_prev1 == 0) {
+        h_prev1 = 1;
+        k_prev1 = max_denominator;
     }
 
     unsigned g = gcd_unsigned(h_prev1, k_prev1);
@@ -142,9 +197,11 @@ struct ResamplerBlock::Impl {
 // ResamplerBlock — constructors / destructors
 // ---------------------------------------------------------------------------
 ResamplerBlock::ResamplerBlock(unsigned interp, unsigned decim)
-    : impl_(std::make_unique<Impl>(interp, decim)), interp_(interp), decim_(decim) {
-    if (interp == 0 || decim == 0)
+    : impl_(nullptr), interp_(interp), decim_(decim) {
+    if (interp == 0 || decim == 0) {
         throw std::invalid_argument("ResamplerBlock: interp and decim must be nonzero");
+    }
+    impl_ = std::make_unique<Impl>(interp, decim);
 }
 
 ResamplerBlock::~ResamplerBlock() = default;
@@ -159,6 +216,19 @@ size_t ResamplerBlock::process(const std::complex<float>* in, size_t n_in,
                                std::complex<float>* out, size_t max_out) {
     if (n_in == 0)
         return 0;
+    if (in == nullptr) {
+        throw std::invalid_argument("ResamplerBlock::process: input must not be null");
+    }
+    if (out == nullptr) {
+        throw std::invalid_argument("ResamplerBlock::process: output must not be null");
+    }
+    if (max_out == 0) {
+        return 0;
+    }
+    if (n_in > static_cast<size_t>(std::numeric_limits<long>::max()) ||
+        max_out > static_cast<size_t>(std::numeric_limits<long>::max())) {
+        throw std::invalid_argument("ResamplerBlock::process: buffer size is too large");
+    }
 
     impl_->i_buf.resize(n_in);
     impl_->q_buf.resize(n_in);
@@ -215,6 +285,12 @@ std::vector<std::complex<float>> ResamplerBlock::process(const std::complex<floa
                                                          size_t n_in) {
     if (n_in == 0)
         return {};
+    if (in == nullptr) {
+        throw std::invalid_argument("ResamplerBlock::process: input must not be null");
+    }
+    if (n_in > static_cast<size_t>(std::numeric_limits<long>::max())) {
+        throw std::invalid_argument("ResamplerBlock::process: input size is too large");
+    }
 
     double src_ratio = static_cast<double>(interp_) / static_cast<double>(decim_);
 
@@ -227,8 +303,7 @@ std::vector<std::complex<float>> ResamplerBlock::process(const std::complex<floa
     }
 
     // Allocate generous output buffers (n_in * ratio + slack for flush tail)
-    size_t buf_size = static_cast<size_t>(
-        static_cast<double>(n_in) * src_ratio + 128.0);
+    size_t buf_size = checked_output_capacity(n_in, src_ratio, 128);
     std::vector<float> all_i(buf_size);
     std::vector<float> all_q(buf_size);
     size_t total_gen = 0;
@@ -320,7 +395,11 @@ std::vector<std::complex<float>> ResamplerBlock::process(const std::complex<floa
 // ---------------------------------------------------------------------------
 size_t ResamplerBlock::estimated_output_size(size_t n_in) const {
     double r = static_cast<double>(interp_) / static_cast<double>(decim_);
-    return static_cast<size_t>(static_cast<double>(n_in) * r + 64.0);
+    const long double required = static_cast<long double>(n_in) * static_cast<long double>(r) + 64.0L;
+    if (required > static_cast<long double>(std::numeric_limits<size_t>::max())) {
+        throw std::overflow_error("ResamplerBlock::estimated_output_size overflow");
+    }
+    return static_cast<size_t>(required);
 }
 
 double ResamplerBlock::ratio() const {

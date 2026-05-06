@@ -3,19 +3,54 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 #include "archerfish/common/constants.hpp"
 
 namespace archerfish::dsp {
 
 void AmSource::configure(const nlohmann::json& params) {
+    double next_amplitude = amplitude_;
+    double next_carrier_freq_hz = carrier_freq_hz_;
+    double next_mod_freq_hz = mod_freq_hz_;
+    double next_mod_depth = mod_depth_;
+
+    if (params.contains("amplitude")) {
+        next_amplitude = number_param(params, "amplitude");
+        validate_non_negative(next_amplitude, "amplitude");
+        if (next_amplitude > static_cast<double>(std::numeric_limits<float>::max())) {
+            throw std::out_of_range("amplitude exceeds float range");
+        }
+    }
+    if (params.contains("carrier_freq_hz")) {
+        next_carrier_freq_hz = number_param(params, "carrier_freq_hz");
+        if (!std::isfinite(next_carrier_freq_hz)) {
+            throw std::invalid_argument("carrier_freq_hz must be finite");
+        }
+    }
+    if (params.contains("mod_freq_hz")) {
+        next_mod_freq_hz = number_param(params, "mod_freq_hz");
+        validate_non_negative(next_mod_freq_hz, "mod_freq_hz");
+    }
+    if (params.contains("mod_depth")) {
+        next_mod_depth = number_param(params, "mod_depth");
+        validate_non_negative(next_mod_depth, "mod_depth");
+        if (next_mod_depth > static_cast<double>(std::numeric_limits<float>::max())) {
+            throw std::out_of_range("mod_depth exceeds float range");
+        }
+    }
+
+    const long double peak = static_cast<long double>(next_amplitude) *
+                             (1.0L + static_cast<long double>(next_mod_depth));
+    if (peak > static_cast<long double>(std::numeric_limits<float>::max())) {
+        throw std::out_of_range("AM peak amplitude exceeds float range");
+    }
+
     configure_common(params);
-    if (params.contains("carrier_freq_hz"))
-        carrier_freq_hz_ = params["carrier_freq_hz"].get<double>();
-    if (params.contains("mod_freq_hz"))
-        mod_freq_hz_ = params["mod_freq_hz"].get<double>();
-    if (params.contains("mod_depth"))
-        mod_depth_ = params["mod_depth"].get<double>();
+    carrier_freq_hz_ = next_carrier_freq_hz;
+    mod_freq_hz_ = next_mod_freq_hz;
+    mod_depth_ = next_mod_depth;
+    carrier_phase_ = 0.0;
 }
 
 void AmSource::prepare() {
@@ -24,6 +59,9 @@ void AmSource::prepare() {
 }
 
 size_t AmSource::render_block(std::complex<float>* out, size_t max_samples) {
+    if (max_samples > 0 && out == nullptr) {
+        throw std::invalid_argument("AmSource render output buffer must not be null");
+    }
     size_t to_generate = compute_block_size(max_samples);
     if (to_generate == 0)
         return 0;
@@ -40,7 +78,8 @@ size_t AmSource::render_block(std::complex<float>* out, size_t max_samples) {
         out[i] = amp * envelope * std::complex<float>(static_cast<float>(std::cos(carrier_phase_)), static_cast<float>(std::sin(carrier_phase_)));
 
         carrier_phase_ += carrier_incr;
-        if (carrier_phase_ >= two_pi) carrier_phase_ -= two_pi;
+        carrier_phase_ = std::fmod(carrier_phase_, two_pi);
+        if (carrier_phase_ < 0.0) carrier_phase_ += two_pi;
 
         samples_produced_++;
     }

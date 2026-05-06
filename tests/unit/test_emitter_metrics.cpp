@@ -2,6 +2,9 @@
 
 #include "archerfish/reporting/emitter_metrics.hpp"
 
+#include <limits>
+#include <stdexcept>
+
 using namespace archerfish::reporting;
 
 TEST_CASE("EmitterMetrics default construction", "[reporting][emitter_metrics]") {
@@ -136,4 +139,124 @@ TEST_CASE("ScenarioMetricsSummary empty round-trip", "[reporting][emitter_metric
     CHECK(restored.scenario_start_sec == 0.0);
     CHECK(restored.scenario_end_sec == 0.0);
     CHECK(restored.emitters.empty());
+}
+
+TEST_CASE("ScenarioMetricsSummary rejects invalid numeric fields", "[reporting][emitter_metrics]") {
+    EmitterMetrics m;
+    m.emitter_id = "cw1";
+    m.device_id = "usrp0";
+    m.samples_rendered = 10;
+    m.completed = true;
+
+    ScenarioMetricsSummary summary;
+    summary.total_emitters = 1;
+    summary.completed_emitters = 1;
+    summary.emitters["cw1"] = m;
+
+    auto j = to_json(summary);
+
+    auto bad_total = j;
+    bad_total["total_emitters"] = -1;
+    CHECK_THROWS_AS(from_json(bad_total), std::invalid_argument);
+
+    auto fractional_total = j;
+    fractional_total["total_emitters"] = 1.5;
+    CHECK_THROWS_AS(from_json(fractional_total), std::invalid_argument);
+
+    auto bad_samples = j;
+    bad_samples["emitters"]["cw1"]["samples_rendered"] = -1;
+    CHECK_THROWS_AS(from_json(bad_samples), std::invalid_argument);
+
+    auto fractional_samples = j;
+    fractional_samples["emitters"]["cw1"]["samples_rendered"] = 1.5;
+    CHECK_THROWS_AS(from_json(fractional_samples), std::invalid_argument);
+
+    auto bad_peak = j;
+    bad_peak["emitters"]["cw1"]["peak_amplitude"] = std::numeric_limits<double>::quiet_NaN();
+    CHECK_THROWS_AS(from_json(bad_peak), std::invalid_argument);
+
+    auto bad_peak_type = j;
+    bad_peak_type["emitters"]["cw1"]["peak_amplitude"] = "loud";
+    CHECK_THROWS_AS(from_json(bad_peak_type), std::invalid_argument);
+
+    auto bad_emitter_id = j;
+    bad_emitter_id["emitters"]["cw1"]["emitter_id"] = 42;
+    CHECK_THROWS_AS(from_json(bad_emitter_id), std::invalid_argument);
+
+    auto mismatched_emitter_id = j;
+    mismatched_emitter_id["emitters"]["cw1"]["emitter_id"] = "other";
+    CHECK_THROWS_AS(from_json(mismatched_emitter_id), std::invalid_argument);
+
+    auto empty_emitter_id = j;
+    empty_emitter_id["emitters"]["cw1"]["emitter_id"] = "";
+    CHECK_THROWS_AS(from_json(empty_emitter_id), std::invalid_argument);
+
+    auto blank_emitter_id = j;
+    blank_emitter_id["emitters"]["cw1"]["emitter_id"] = " \t\n";
+    CHECK_THROWS_AS(from_json(blank_emitter_id), std::invalid_argument);
+
+    auto bad_completed = j;
+    bad_completed["emitters"]["cw1"]["completed"] = "true";
+    CHECK_THROWS_AS(from_json(bad_completed), std::invalid_argument);
+}
+
+TEST_CASE("ScenarioMetricsSummary rejects invalid emitter containers", "[reporting][emitter_metrics]") {
+    EmitterMetrics m;
+    m.emitter_id = "cw1";
+    m.device_id = "usrp0";
+    m.completed = true;
+
+    ScenarioMetricsSummary summary;
+    summary.total_emitters = 1;
+    summary.completed_emitters = 1;
+    summary.emitters["cw1"] = m;
+
+    auto j = to_json(summary);
+
+    auto emitters_array = j;
+    emitters_array["emitters"] = nlohmann::json::array({j["emitters"]["cw1"]});
+    CHECK_THROWS_AS(from_json(emitters_array), std::invalid_argument);
+
+    auto emitters_string = j;
+    emitters_string["emitters"] = "cw1";
+    CHECK_THROWS_AS(from_json(emitters_string), std::invalid_argument);
+
+    auto scalar_entry = j;
+    scalar_entry["emitters"]["cw1"] = "complete";
+    CHECK_THROWS_AS(from_json(scalar_entry), std::invalid_argument);
+
+    auto empty_key = j;
+    empty_key["emitters"].erase("cw1");
+    empty_key["emitters"][""] = j["emitters"]["cw1"];
+    empty_key["emitters"][""]["emitter_id"] = "";
+    CHECK_THROWS_AS(from_json(empty_key), std::invalid_argument);
+
+    CHECK_THROWS_AS(from_json(nlohmann::json::array()), std::invalid_argument);
+}
+
+TEST_CASE("ScenarioMetricsSummary rejects inconsistent aggregate counts", "[reporting][emitter_metrics]") {
+    EmitterMetrics m;
+    m.emitter_id = "cw1";
+    m.device_id = "usrp0";
+    m.completed = true;
+
+    ScenarioMetricsSummary summary;
+    summary.total_emitters = 1;
+    summary.completed_emitters = 1;
+    summary.emitters["cw1"] = m;
+
+    auto j = to_json(summary);
+
+    auto bad_total = j;
+    bad_total["total_emitters"] = 2;
+    CHECK_THROWS_AS(from_json(bad_total), std::invalid_argument);
+
+    auto bad_completed = j;
+    bad_completed["completed_emitters"] = 0;
+    CHECK_THROWS_AS(from_json(bad_completed), std::invalid_argument);
+
+    auto bad_time_window = j;
+    bad_time_window["scenario_start_sec"] = 5.0;
+    bad_time_window["scenario_end_sec"] = 4.0;
+    CHECK_THROWS_AS(from_json(bad_time_window), std::invalid_argument);
 }

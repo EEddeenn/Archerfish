@@ -1,14 +1,16 @@
 #pragma once
 
+#include <cmath>
 #include <string>
 #include <fmt/format.h>
 
 namespace archerfish::cli {
 
 [[nodiscard]] inline std::string format_freq(double hz) {
-    if (hz >= 1e9) return fmt::format("{:.1f} GHz", hz / 1e9);
-    if (hz >= 1e6) return fmt::format("{:.1f} MHz", hz / 1e6);
-    if (hz >= 1e3) return fmt::format("{:.1f} kHz", hz / 1e3);
+    const double abs_hz = std::abs(hz);
+    if (abs_hz >= 1e9) return fmt::format("{:.1f} GHz", hz / 1e9);
+    if (abs_hz >= 1e6) return fmt::format("{:.1f} MHz", hz / 1e6);
+    if (abs_hz >= 1e3) return fmt::format("{:.1f} kHz", hz / 1e3);
     return fmt::format("{:.0f} Hz", hz);
 }
 

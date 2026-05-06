@@ -3,6 +3,8 @@
 
 #include "archerfish/common/sample.hpp"
 
+#include <limits>
+
 using namespace archerfish::common;
 using Catch::Matchers::WithinAbs;
 
@@ -29,6 +31,13 @@ TEST_CASE("SampleBuffer duration_sec", "[common][sample]") {
 TEST_CASE("SampleBuffer duration_sec with zero rate", "[common][sample]") {
     SampleBuffer buf;
     buf.sample_rate = 0.0;
+    buf.samples.resize(100);
+    CHECK(buf.duration_sec() == 0.0);
+}
+
+TEST_CASE("SampleBuffer duration_sec with non-finite rate", "[common][sample]") {
+    SampleBuffer buf;
+    buf.sample_rate = std::numeric_limits<double>::quiet_NaN();
     buf.samples.resize(100);
     CHECK(buf.duration_sec() == 0.0);
 }
@@ -67,4 +76,26 @@ TEST_CASE("SampleBuffer crest_factor on impulse", "[common][sample]") {
     double rms = buf.rms_amplitude();
     CHECK_THAT(buf.crest_factor(), WithinAbs(peak / rms, 1e-6));
     CHECK(buf.crest_factor() > 1.0);
+}
+
+TEST_CASE("SampleBuffer statistics ignore non-finite samples", "[common][sample]") {
+    SampleBuffer buf;
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    buf.samples = {{nan, 0.0f}, {inf, 0.0f}, {3.0f, 4.0f}};
+
+    CHECK_THAT(buf.peak_amplitude(), WithinAbs(5.0, 1e-6));
+    CHECK_THAT(buf.rms_amplitude(), WithinAbs(5.0, 1e-6));
+    CHECK_THAT(buf.crest_factor(), WithinAbs(1.0, 1e-6));
+}
+
+TEST_CASE("SampleBuffer statistics return zero when all samples are non-finite", "[common][sample]") {
+    SampleBuffer buf;
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    buf.samples = {{nan, 0.0f}, {inf, 0.0f}};
+
+    CHECK(buf.peak_amplitude() == 0.0);
+    CHECK(buf.rms_amplitude() == 0.0);
+    CHECK(buf.crest_factor() == 0.0);
 }

@@ -237,6 +237,10 @@ size_t UhdDevice::send_samples(uint32_t channel,
         spdlog::warn("send_samples called on CH{} but TX not active", channel);
         return 0;
     }
+    if (count > 0 && data == nullptr) {
+        spdlog::error("send_samples called with null data and nonzero count on CH{}", channel);
+        return 0;
+    }
 
     auto& streamer = it->second;
     uhd::tx_metadata_t md;

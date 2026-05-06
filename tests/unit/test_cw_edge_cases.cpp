@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/dsp/cw_source.hpp"
@@ -82,4 +83,21 @@ TEST_CASE("CW with zero amplitude produces silence", "[dsp][cw][edge]") {
         REQUIRE_THAT(s.real(), WithinAbs(0.0f, 1e-9f));
         REQUIRE_THAT(s.imag(), WithinAbs(0.0f, 1e-9f));
     }
+}
+
+TEST_CASE("CW rejects non-finite frequency", "[dsp][cw][edge]") {
+    CwSource src;
+    CHECK_THROWS_AS(src.configure({{"frequency_hz", "high"}, {"sample_rate", 1e6}}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(src.configure({{"frequency_hz", std::numeric_limits<double>::quiet_NaN()}, {"sample_rate", 1e6}}),
+                    std::invalid_argument);
+}
+
+TEST_CASE("CW render validates output buffer", "[dsp][cw][edge]") {
+    CwSource src;
+    src.configure({{"sample_rate", 1e6}, {"frequency_hz", 0.0}});
+    src.prepare();
+
+    CHECK(src.render_block(nullptr, 0) == 0);
+    CHECK_THROWS_AS(src.render_block(nullptr, 1), std::invalid_argument);
 }

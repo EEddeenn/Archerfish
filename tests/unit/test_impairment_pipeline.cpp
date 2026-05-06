@@ -3,11 +3,20 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 #include "archerfish/impairments/impairment_chain.hpp"
+#include "archerfish/impairments/amplitude_ripple.hpp"
 #include "archerfish/impairments/cfo.hpp"
+#include "archerfish/impairments/burst_dropout.hpp"
 #include "archerfish/impairments/dc_offset.hpp"
+#include "archerfish/impairments/delay.hpp"
+#include "archerfish/impairments/fading.hpp"
+#include "archerfish/impairments/iq_imbalance.hpp"
+#include "archerfish/impairments/multipath.hpp"
+#include "archerfish/impairments/pa_nonlinearity.hpp"
+#include "archerfish/impairments/phase_noise.hpp"
 #include "archerfish/impairments/phase_offset.hpp"
 #include "archerfish/impairments/awgn.hpp"
 #include "archerfish/scenario/scenario.hpp"
@@ -72,4 +81,46 @@ TEST_CASE("Impairment pipeline: chain enable/disable toggles effect", "[integrat
     chain->set_enabled(0, true);
     chain->apply(data.data(), data.size());
     REQUIRE_THAT(data[0].real(), WithinAbs(5.0f, 1e-5f));
+}
+
+TEST_CASE("Impairment pipeline rejects invalid build settings", "[integration][impairment]") {
+    archerfish::scenario::ImpairmentSettings invalid_sample_rate;
+    invalid_sample_rate.cfo_hz = 100.0;
+    REQUIRE_THROWS_AS(build_chain(invalid_sample_rate, 0.0), std::invalid_argument);
+
+    archerfish::scenario::ImpairmentSettings negative_multipath_delay;
+    negative_multipath_delay.multipath_delay_samples = -1.0;
+    negative_multipath_delay.multipath_amplitude = 0.5;
+    REQUIRE_THROWS_AS(build_chain(negative_multipath_delay, 1e6), std::invalid_argument);
+
+    archerfish::scenario::ImpairmentSettings fractional_multipath_delay;
+    fractional_multipath_delay.multipath_delay_samples = 1.5;
+    fractional_multipath_delay.multipath_amplitude = 0.5;
+    REQUIRE_THROWS_AS(build_chain(fractional_multipath_delay, 1e6), std::invalid_argument);
+}
+
+TEST_CASE("Impairments reject null apply buffers for non-zero counts", "[integration][impairment]") {
+    std::complex<float>* null_data = nullptr;
+
+    CHECK_NOTHROW(ImpairmentChain{}.apply(null_data, 0));
+    CHECK_THROWS_AS(ImpairmentChain{}.apply(null_data, 1), std::invalid_argument);
+
+    CHECK_NOTHROW(AwgnImpairment{}.apply(null_data, 0));
+    CHECK_THROWS_AS(AwgnImpairment{}.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(CfoImpairment{}.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(PhaseOffsetImpairment{}.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(DcOffsetImpairment{}.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(IqImbalanceImpairment{}.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(AmplitudeRippleImpairment{}.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(DelayImpairment{}.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(BurstDropoutImpairment{}.apply(null_data, 1), std::invalid_argument);
+
+    PhaseNoiseImpairment phase_noise(100.0, 0.1, 1e6);
+    MultipathImpairment multipath(1, 0.5f);
+    FadingImpairment fading(100.0, 1e6);
+    PaNonlinearityImpairment pa("rapp");
+    CHECK_THROWS_AS(phase_noise.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(multipath.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(fading.apply(null_data, 1), std::invalid_argument);
+    CHECK_THROWS_AS(pa.apply(null_data, 1), std::invalid_argument);
 }

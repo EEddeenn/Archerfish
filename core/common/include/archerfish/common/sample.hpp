@@ -19,7 +19,7 @@ struct SampleBuffer {
     [[nodiscard]] size_t count() const { return samples.size(); }
 
     [[nodiscard]] double duration_sec() const {
-        if (sample_rate <= 0.0) return 0.0;
+        if (!std::isfinite(sample_rate) || sample_rate <= 0.0) return 0.0;
         return static_cast<double>(samples.size()) / sample_rate;
     }
 
@@ -28,6 +28,7 @@ struct SampleBuffer {
         double peak = 0.0;
         for (const auto& s : samples) {
             double mag = std::abs(s);
+            if (!std::isfinite(mag)) continue;
             if (mag > peak) peak = mag;
         }
         return peak;
@@ -36,11 +37,15 @@ struct SampleBuffer {
     [[nodiscard]] double rms_amplitude() const {
         if (samples.empty()) return 0.0;
         double sum_sq = 0.0;
+        size_t finite_count = 0;
         for (const auto& s : samples) {
             double mag = std::abs(s);
+            if (!std::isfinite(mag)) continue;
             sum_sq += mag * mag;
+            ++finite_count;
         }
-        return std::sqrt(sum_sq / static_cast<double>(samples.size()));
+        if (finite_count == 0) return 0.0;
+        return std::sqrt(sum_sq / static_cast<double>(finite_count));
     }
 
     [[nodiscard]] double crest_factor() const {

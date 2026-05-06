@@ -1,10 +1,98 @@
 #include "archerfish/reporting/report.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <fmt/format.h>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "archerfish/scenario/plan_io.hpp"
 
 namespace archerfish::reporting {
+
+namespace {
+
+double get_non_negative_finite_double(const nlohmann::json& j, const char* key) {
+    const auto& raw = j.at(key);
+    if (!raw.is_number()) {
+        throw std::invalid_argument(std::string(key) + " must be a number");
+    }
+    double value = raw.get<double>();
+    if (!std::isfinite(value) || value < 0.0) {
+        throw std::invalid_argument(std::string(key) + " must be finite and non-negative");
+    }
+    return value;
+}
+
+uint32_t get_uint32(const nlohmann::json& j, const char* key) {
+    const auto& value = j.at(key);
+    if (value.is_number_integer() && value.get<std::int64_t>() < 0) {
+        throw std::invalid_argument(std::string(key) + " must be non-negative");
+    }
+    if (!value.is_number_unsigned() && !value.is_number_integer()) {
+        throw std::invalid_argument(std::string(key) + " must be an integer");
+    }
+    const auto raw = value.get<uint64_t>();
+    if (raw > std::numeric_limits<uint32_t>::max()) {
+        throw std::invalid_argument(std::string(key) + " is out of uint32 range");
+    }
+    return static_cast<uint32_t>(raw);
+}
+
+std::string get_string(const nlohmann::json& j, const char* key) {
+    const auto& value = j.at(key);
+    if (!value.is_string()) {
+        throw std::invalid_argument(std::string(key) + " must be a string");
+    }
+    return value.get<std::string>();
+}
+
+std::vector<std::string> get_string_array(const nlohmann::json& j, const char* key) {
+    const auto& value = j.at(key);
+    if (!value.is_array()) {
+        throw std::invalid_argument(std::string(key) + " must be an array");
+    }
+    std::vector<std::string> result;
+    result.reserve(value.size());
+    for (const auto& item : value) {
+        if (!item.is_string()) {
+            throw std::invalid_argument(std::string(key) + " entries must be strings");
+        }
+        result.push_back(item.get<std::string>());
+    }
+    return result;
+}
+
+const nlohmann::json& get_array(const nlohmann::json& j, const char* key) {
+    const auto& value = j.at(key);
+    if (!value.is_array()) {
+        throw std::invalid_argument(std::string(key) + " must be an array");
+    }
+    return value;
+}
+
+void require_object(const nlohmann::json& j, const char* name) {
+    if (!j.is_object()) {
+        throw std::invalid_argument(std::string(name) + " must be an object");
+    }
+}
+
+void require_duration_matches_window(double start_sec, double stop_sec, double duration_sec) {
+    if (stop_sec < start_sec) {
+        throw std::invalid_argument("actual_stop_sec must be >= actual_start_sec");
+    }
+
+    const double expected_duration = stop_sec - start_sec;
+    const double tolerance = 1e-9 * std::max({1.0, std::abs(stop_sec), std::abs(start_sec), std::abs(duration_sec)});
+    if (std::abs(duration_sec - expected_duration) > tolerance) {
+        throw std::invalid_argument("actual_duration_sec must match actual_stop_sec - actual_start_sec");
+    }
+}
+
+} // namespace
 
 nlohmann::json DeviceInfo_to_json(const DeviceInfo& di) {
     return {
@@ -15,10 +103,12 @@ nlohmann::json DeviceInfo_to_json(const DeviceInfo& di) {
 }
 
 DeviceInfo DeviceInfo_from_json(const nlohmann::json& j) {
+    require_object(j, "device");
+
     DeviceInfo di;
-    di.device_id = j.at("device_id").get<std::string>();
-    di.device_type = j.at("device_type").get<std::string>();
-    di.channel = j.at("channel").get<uint32_t>();
+    di.device_id = get_string(j, "device_id");
+    di.device_type = get_string(j, "device_type");
+    di.channel = get_uint32(j, "channel");
     return di;
 }
 
@@ -64,35 +154,42 @@ nlohmann::json Report::to_json() const {
 }
 
 Report Report::from_json(const nlohmann::json& j) {
-    Report r;
-    r.scenario_name = j.at("scenario_name").get<std::string>();
-    r.scenario_hash = j.at("scenario_hash").get<std::string>();
-    r.status = j.at("status").get<std::string>();
-    r.planned_start_sec = j.at("planned_start_sec").get<double>();
-    r.actual_start_sec = j.at("actual_start_sec").get<double>();
-    r.actual_stop_sec = j.at("actual_stop_sec").get<double>();
-    r.actual_duration_sec = j.at("actual_duration_sec").get<double>();
+    require_object(j, "report");
 
-    for (const auto& d : j.at("devices")) {
+    Report r;
+    r.scenario_name = get_string(j, "scenario_name");
+    r.scenario_hash = get_string(j, "scenario_hash");
+    r.status = get_string(j, "status");
+    r.planned_start_sec = get_non_negative_finite_double(j, "planned_start_sec");
+    r.actual_start_sec = get_non_negative_finite_double(j, "actual_start_sec");
+    r.actual_stop_sec = get_non_negative_finite_double(j, "actual_stop_sec");
+    r.actual_duration_sec = get_non_negative_finite_double(j, "actual_duration_sec");
+    require_duration_matches_window(r.actual_start_sec, r.actual_stop_sec, r.actual_duration_sec);
+
+    for (const auto& d : get_array(j, "devices")) {
         r.devices.push_back(DeviceInfo_from_json(d));
     }
 
-    for (const auto& w : j.at("warnings")) {
+    for (const auto& w : get_array(j, "warnings")) {
+        require_object(w, "warning");
         r.warnings.push_back(scenario::error_from_json(w));
     }
 
-    for (const auto& e : j.at("errors")) {
+    for (const auto& e : get_array(j, "errors")) {
+        require_object(e, "error");
         r.errors.push_back(scenario::error_from_json(e));
     }
 
-    r.artifact_paths = j.at("artifact_paths").get<std::vector<std::string>>();
+    r.artifact_paths = get_string_array(j, "artifact_paths");
 
-    if (j.contains("marker_events") && j.at("marker_events").is_array()) {
-        for (const auto& mj : j.at("marker_events")) {
+    if (j.contains("marker_events")) {
+        for (const auto& mj : get_array(j, "marker_events")) {
+            require_object(mj, "marker_event");
+
             MarkerRecord mr;
-            mr.name = mj.at("name").get<std::string>();
-            mr.planned_time_sec = mj.at("planned_time_sec").get<double>();
-            mr.wall_clock_sec = mj.at("wall_clock_sec").get<double>();
+            mr.name = get_string(mj, "name");
+            mr.planned_time_sec = get_non_negative_finite_double(mj, "planned_time_sec");
+            mr.wall_clock_sec = get_non_negative_finite_double(mj, "wall_clock_sec");
             r.marker_events.push_back(std::move(mr));
         }
     }

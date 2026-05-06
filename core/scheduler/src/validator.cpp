@@ -1,6 +1,10 @@
 #include "archerfish/scenario/validator.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -19,10 +23,90 @@ using common::Error;
 using common::ErrorCategory;
 using common::ErrorList;
 
+constexpr int kMaxRepeatCount = 1024;
+
+std::optional<double> get_number_param(const nlohmann::json& params, const char* key) {
+    if (!params.contains(key) || !params.at(key).is_number()) {
+        return std::nullopt;
+    }
+    const double value = params.at(key).get<double>();
+    if (!std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+bool is_uint32_json(const nlohmann::json& value) {
+    if (!value.is_number_integer() && !value.is_number_unsigned()) {
+        return false;
+    }
+    if (value.is_number_integer()) {
+        const auto parsed = value.get<std::int64_t>();
+        return parsed >= 0 &&
+               parsed <= static_cast<std::int64_t>(std::numeric_limits<uint32_t>::max());
+    }
+    return value.get<std::uint64_t>() <= std::numeric_limits<uint32_t>::max();
+}
+
+bool has_string_payload(const ScenarioEvent& evt, const char* key) {
+    return evt.payload.contains(key) && evt.payload.at(key).is_string();
+}
+
+bool has_non_empty_string_payload(const ScenarioEvent& evt, const char* key) {
+    return has_string_payload(evt, key) && !evt.payload.at(key).get<std::string>().empty();
+}
+
+std::string channel_binding_key(const std::string& device, uint32_t channel) {
+    return device + ":" + std::to_string(channel);
+}
+
+std::unordered_set<std::string> effective_channel_bindings(const Scenario& scenario) {
+    std::unordered_set<std::string> bindings;
+    if (!scenario.channel_defs.empty()) {
+        for (const auto& ch : scenario.channel_defs) {
+            bindings.insert(channel_binding_key(ch.device, ch.index));
+        }
+        return bindings;
+    }
+    for (const auto& dev : scenario.devices) {
+        bindings.insert(channel_binding_key(dev.id, dev.channel.value_or(0)));
+    }
+    return bindings;
+}
+
+const WaveformDef* waveform_for_emitter(
+    const EmitterDef& emitter,
+    const std::unordered_map<std::string, const WaveformDef*>& waveform_map) {
+    if (emitter.waveform.has_value()) {
+        return &*emitter.waveform;
+    }
+    if (emitter.waveform_ref.has_value()) {
+        auto it = waveform_map.find(*emitter.waveform_ref);
+        if (it != waveform_map.end()) {
+            return it->second;
+        }
+    }
+    return nullptr;
+}
+
+double emitter_amplitude(
+    const EmitterDef& emitter,
+    const std::unordered_map<std::string, const WaveformDef*>& waveform_map) {
+    const auto* waveform = waveform_for_emitter(emitter, waveform_map);
+    if (waveform == nullptr) {
+        return 0.0;
+    }
+    return get_number_param(waveform->params, "amplitude").value_or(0.0);
+}
+
 void check_unique_ids(const Scenario& scenario, ValidationResult& result) {
     std::unordered_set<std::string> device_ids;
     for (const auto& dev : scenario.devices) {
-        if (!device_ids.insert(dev.id).second) {
+        if (dev.id.empty()) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V010_EMPTY_DEVICE_ID",
+                                     "Device id must be set"});
+        } else if (!device_ids.insert(dev.id).second) {
             result.errors.push_back({ErrorCategory::Validation,
                                      "V010_DUPLICATE_DEVICE_ID",
                                      "Duplicate device id: '" + dev.id + "'"});
@@ -31,7 +115,11 @@ void check_unique_ids(const Scenario& scenario, ValidationResult& result) {
 
     std::unordered_set<std::string> emitter_ids;
     for (const auto& em : scenario.emitters) {
-        if (!emitter_ids.insert(em.id).second) {
+        if (em.id.empty()) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V011_EMPTY_EMITTER_ID",
+                                     "Emitter id must be set"});
+        } else if (!emitter_ids.insert(em.id).second) {
             result.errors.push_back({ErrorCategory::Validation,
                                      "V011_DUPLICATE_EMITTER_ID",
                                      "Duplicate emitter id: '" + em.id + "'"});
@@ -41,7 +129,11 @@ void check_unique_ids(const Scenario& scenario, ValidationResult& result) {
     std::unordered_set<std::string> waveform_ids;
     for (const auto& wf : scenario.waveforms) {
         if (wf.id.has_value()) {
-            if (!waveform_ids.insert(*wf.id).second) {
+            if (wf.id->empty()) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V012_EMPTY_WAVEFORM_ID",
+                                         "Waveform id must be non-empty when provided"});
+            } else if (!waveform_ids.insert(*wf.id).second) {
                 result.errors.push_back({ErrorCategory::Validation,
                                          "V012_DUPLICATE_WAVEFORM_ID",
                                          "Duplicate waveform id: '" + *wf.id + "'"});
@@ -51,6 +143,11 @@ void check_unique_ids(const Scenario& scenario, ValidationResult& result) {
 }
 
 void check_not_empty(const Scenario& scenario, ValidationResult& result) {
+    if (scenario.metadata.name.empty()) {
+        result.errors.push_back({ErrorCategory::Validation,
+                                 "V013_MISSING_METADATA_NAME",
+                                 "Scenario metadata.name must be set"});
+    }
     if (scenario.devices.empty()) {
         result.errors.push_back({ErrorCategory::Validation,
                                  "V008_NO_DEVICES",
@@ -64,13 +161,13 @@ void check_not_empty(const Scenario& scenario, ValidationResult& result) {
 }
 
 void check_rf_settings(const DeviceDef& device, ValidationResult& result) {
-    if (device.rf.freq_hz <= 0.0) {
+    if (!std::isfinite(device.rf.freq_hz) || device.rf.freq_hz <= 0.0) {
         result.errors.push_back({ErrorCategory::Validation,
                                  "V007_INVALID_FREQ",
                                  "Device '" + device.id +
                                      "': freq_hz must be > 0"});
     }
-    if (device.rf.rate_sps <= 0.0) {
+    if (!std::isfinite(device.rf.rate_sps) || device.rf.rate_sps <= 0.0) {
         result.errors.push_back({ErrorCategory::Validation,
                                  "V007_INVALID_RATE",
                                  "Device '" + device.id +
@@ -89,16 +186,15 @@ void check_waveform_type(const WaveformDef& wf, ValidationResult& result) {
 
 void check_amplitude(const WaveformDef& wf, ValidationResult& result) {
     if (wf.params.contains("amplitude")) {
-        double amp = wf.params["amplitude"].get<double>();
-        if (amp <= 0.0 || amp > 1.0) {
+        auto amp_value = get_number_param(wf.params, "amplitude");
+        if (!amp_value.has_value() || !std::isfinite(*amp_value) || *amp_value <= 0.0 || *amp_value > 1.0) {
             result.errors.push_back({ErrorCategory::Validation,
                                      "V001_INVALID_AMPLITUDE",
-                                     "Waveform amplitude must be in (0, 1], got " +
-                                         std::to_string(amp)});
-        } else if (amp > 0.9) {
+                                     "Waveform amplitude must be a finite number in (0, 1]"});
+        } else if (*amp_value > 0.9) {
             result.warnings.push_back({ErrorCategory::QualityWarning,
                                        "V001_AMPLITUDE_CLIPPING_RISK",
-                                       "Waveform amplitude " + std::to_string(amp) +
+                                       "Waveform amplitude " + std::to_string(*amp_value) +
                                            " is near clipping threshold (>0.9)"});
         }
     }
@@ -114,11 +210,17 @@ void check_emitter(const EmitterDef& emitter,
                    const std::unordered_map<std::string, const DeviceDef*>& device_map,
                    const std::unordered_set<std::string>& waveform_ids,
                    ValidationResult& result) {
-    if (emitter.duration_sec <= 0.0) {
+    if (!std::isfinite(emitter.duration_sec) || emitter.duration_sec <= 0.0) {
         result.errors.push_back({ErrorCategory::Validation,
                                  "V002_INVALID_DURATION",
                                  "Emitter '" + emitter.id +
                                      "': duration_sec must be > 0"});
+    }
+    if (!std::isfinite(emitter.start_after_sec) || emitter.start_after_sec < 0.0) {
+        result.errors.push_back({ErrorCategory::Validation,
+                                 "V002_INVALID_START",
+                                 "Emitter '" + emitter.id +
+                                     "': start_after_sec must be finite and >= 0"});
     }
 
     if (!device_ids.count(emitter.device)) {
@@ -144,7 +246,12 @@ void check_emitter(const EmitterDef& emitter,
         }
     }
 
-    if (!emitter.waveform.has_value() && !emitter.waveform_ref.has_value()) {
+    if (emitter.waveform.has_value() && emitter.waveform_ref.has_value()) {
+        result.errors.push_back({ErrorCategory::Validation,
+                                 "V005_AMBIGUOUS_WAVEFORM",
+                                 "Emitter '" + emitter.id +
+                                     "' must not set both inline waveform and waveform_ref"});
+    } else if (!emitter.waveform.has_value() && !emitter.waveform_ref.has_value()) {
         result.errors.push_back({ErrorCategory::Validation,
                                  "V005_NO_WAVEFORM",
                                  "Emitter '" + emitter.id +
@@ -185,23 +292,51 @@ struct EmitterWindow {
     double end;
 };
 
+ChannelKey channel_key_for_emitter(
+    const EmitterDef& emitter,
+    const std::unordered_map<std::string, const ChannelDef*>& channel_map) {
+    if (emitter.channel_id.has_value()) {
+        auto it = channel_map.find(*emitter.channel_id);
+        if (it != channel_map.end()) {
+            return {it->second->device, it->second->index};
+        }
+    }
+    return {emitter.device, emitter.channel};
+}
+
 std::vector<EmitterWindow> get_emitter_windows(const EmitterDef& em) {
     std::vector<EmitterWindow> windows;
     int count = em.repeat.has_value() ? em.repeat->count : 1;
     double interval = em.repeat.has_value() ? em.repeat->interval_sec : 0.0;
+    if (count < 1 || count > kMaxRepeatCount ||
+        !std::isfinite(interval) || interval < 0.0 ||
+        (count > 1 && interval <= 0.0) ||
+        !std::isfinite(em.start_after_sec) || !std::isfinite(em.duration_sec)) {
+        return windows;
+    }
     for (int i = 0; i < count; ++i) {
         double s = em.start_after_sec + static_cast<double>(i) * interval;
+        if (!std::isfinite(s)) {
+            return {};
+        }
         windows.push_back({s, s + em.duration_sec});
     }
     return windows;
 }
 
-void check_overlaps(const Scenario& scenario, ValidationResult& result) {
+void check_overlaps(const Scenario& scenario,
+                    const std::unordered_map<std::string, const WaveformDef*>& waveform_map,
+                    ValidationResult& result) {
     std::unordered_map<ChannelKey, std::vector<size_t>, ChannelKeyHash> by_channel;
+    std::unordered_map<std::string, const ChannelDef*> channel_map;
+
+    for (const auto& ch : scenario.channel_defs) {
+        channel_map[ch.id] = &ch;
+    }
 
     for (size_t i = 0; i < scenario.emitters.size(); ++i) {
         const auto& em = scenario.emitters[i];
-        by_channel[{em.device, em.channel}].push_back(i);
+        by_channel[channel_key_for_emitter(em, channel_map)].push_back(i);
     }
 
     for (const auto& [key, indices] : by_channel) {
@@ -225,11 +360,8 @@ void check_overlaps(const Scenario& scenario, ValidationResult& result) {
                     bool mixing_allowed = (a.mixing == MixingMode::Additive) &&
                                           (b.mixing == MixingMode::Additive);
                     if (mixing_allowed) {
-                        double peak_a = 0.0, peak_b = 0.0;
-                        if (a.waveform.has_value() && a.waveform->params.contains("amplitude"))
-                            peak_a = a.waveform->params["amplitude"].get<double>();
-                        if (b.waveform.has_value() && b.waveform->params.contains("amplitude"))
-                            peak_b = b.waveform->params["amplitude"].get<double>();
+                        const double peak_a = emitter_amplitude(a, waveform_map);
+                        const double peak_b = emitter_amplitude(b, waveform_map);
                         if (peak_a + peak_b > 1.0) {
                             result.warnings.push_back(
                                 {ErrorCategory::QualityWarning,
@@ -256,14 +388,20 @@ void check_overlaps(const Scenario& scenario, ValidationResult& result) {
 
 void check_events(const Scenario& scenario, const std::unordered_set<std::string>& device_ids,
                   ValidationResult& result) {
+    const auto channel_bindings = effective_channel_bindings(scenario);
     for (const auto& evt : scenario.events) {
+        if (!std::isfinite(evt.time_sec) || evt.time_sec < 0.0) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V014_INVALID_EVENT_TIME",
+                                     "Event time_sec must be finite and >= 0"});
+        }
         if (!device_ids.count(evt.target_device)) {
             result.errors.push_back({ErrorCategory::Validation,
                                      "V013_EVENT_UNKNOWN_DEVICE",
                                      "Event targets unknown device '" + evt.target_device + "'"});
         }
         if (evt.type != "retune" && evt.type != "gain_change" && evt.type != "marker" &&
-            evt.type != "burst" && evt.type != "waveform_switch" && evt.type != "impairment_change") {
+            evt.type != "waveform_switch" && evt.type != "impairment_change") {
             result.errors.push_back({ErrorCategory::Validation,
                                      "V014_INVALID_EVENT_TYPE",
                                      "Unknown event type '" + evt.type + "'"});
@@ -274,6 +412,27 @@ void check_events(const Scenario& scenario, const std::unordered_set<std::string
                                          "V015_RETUNE_MISSING_FREQ",
                                          "Retune event for device '" + evt.target_device +
                                              "' missing freq_hz in payload"});
+            } else if (!evt.payload.at("freq_hz").is_number() ||
+                       !std::isfinite(evt.payload.at("freq_hz").get<double>()) ||
+                       evt.payload.at("freq_hz").get<double>() <= 0.0) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V015_RETUNE_INVALID_FREQ",
+                                         "Retune event freq_hz must be a finite number > 0"});
+            }
+            if (evt.payload.contains("channel") && !is_uint32_json(evt.payload.at("channel"))) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V015_RETUNE_INVALID_CHANNEL",
+                                         "Retune event channel must be an unsigned 32-bit integer"});
+            } else if (evt.payload.contains("channel") && device_ids.count(evt.target_device)) {
+                uint32_t channel = evt.payload.at("channel").is_number_integer()
+                                       ? static_cast<uint32_t>(evt.payload.at("channel").get<std::int64_t>())
+                                       : static_cast<uint32_t>(evt.payload.at("channel").get<std::uint64_t>());
+                if (!channel_bindings.count(channel_binding_key(evt.target_device, channel))) {
+                    result.errors.push_back({ErrorCategory::Validation,
+                                             "V015_RETUNE_UNKNOWN_CHANNEL",
+                                             "Retune event channel " + std::to_string(channel) +
+                                                 " is not bound to device '" + evt.target_device + "'"});
+                }
             }
         }
         if (evt.type == "gain_change") {
@@ -282,6 +441,37 @@ void check_events(const Scenario& scenario, const std::unordered_set<std::string
                                          "V016_GAIN_MISSING_DB",
                                          "Gain change event for device '" + evt.target_device +
                                              "' missing gain_db in payload"});
+            } else if (!evt.payload.at("gain_db").is_number() ||
+                       !std::isfinite(evt.payload.at("gain_db").get<double>())) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V016_GAIN_INVALID_DB",
+                                         "Gain change event gain_db must be a finite number"});
+            }
+            if (evt.payload.contains("channel") && !is_uint32_json(evt.payload.at("channel"))) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V016_GAIN_INVALID_CHANNEL",
+                                         "Gain change event channel must be an unsigned 32-bit integer"});
+            } else if (evt.payload.contains("channel") && device_ids.count(evt.target_device)) {
+                uint32_t channel = evt.payload.at("channel").is_number_integer()
+                                       ? static_cast<uint32_t>(evt.payload.at("channel").get<std::int64_t>())
+                                       : static_cast<uint32_t>(evt.payload.at("channel").get<std::uint64_t>());
+                if (!channel_bindings.count(channel_binding_key(evt.target_device, channel))) {
+                    result.errors.push_back({ErrorCategory::Validation,
+                                             "V016_GAIN_UNKNOWN_CHANNEL",
+                                             "Gain change event channel " + std::to_string(channel) +
+                                                 " is not bound to device '" + evt.target_device + "'"});
+                }
+            }
+        }
+        if (evt.type == "marker") {
+            if (evt.payload.contains("name") && !evt.payload.at("name").is_string()) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V021_MARKER_INVALID_NAME",
+                                         "Marker event name must be a string when provided"});
+            } else if (evt.payload.contains("name") && !has_non_empty_string_payload(evt, "name")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V021_MARKER_EMPTY_NAME",
+                                         "Marker event name must be non-empty when provided"});
             }
         }
         if (evt.type == "waveform_switch") {
@@ -290,12 +480,28 @@ void check_events(const Scenario& scenario, const std::unordered_set<std::string
                                          "V019_WAVEFORM_SWITCH_MISSING_EMITTER",
                                          "Waveform switch event for device '" + evt.target_device +
                                              "' missing emitter_id in payload"});
+            } else if (!has_string_payload(evt, "emitter_id")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V019_WAVEFORM_SWITCH_INVALID_EMITTER",
+                                         "Waveform switch event emitter_id must be a string"});
+            } else if (!has_non_empty_string_payload(evt, "emitter_id")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V019_WAVEFORM_SWITCH_EMPTY_EMITTER",
+                                         "Waveform switch event emitter_id must be non-empty"});
             }
             if (!evt.payload.contains("new_waveform")) {
                 result.errors.push_back({ErrorCategory::Validation,
                                          "V019_WAVEFORM_SWITCH_MISSING_WAVEFORM",
                                          "Waveform switch event for device '" + evt.target_device +
                                              "' missing new_waveform in payload"});
+            } else if (!has_string_payload(evt, "new_waveform")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V019_WAVEFORM_SWITCH_INVALID_WAVEFORM",
+                                         "Waveform switch event new_waveform must be a string"});
+            } else if (!has_non_empty_string_payload(evt, "new_waveform")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V019_WAVEFORM_SWITCH_EMPTY_WAVEFORM",
+                                         "Waveform switch event new_waveform must be non-empty"});
             }
         }
         if (evt.type == "impairment_change") {
@@ -304,12 +510,33 @@ void check_events(const Scenario& scenario, const std::unordered_set<std::string
                                          "V020_IMPAIRMENT_CHANGE_MISSING_EMITTER",
                                          "Impairment change event for device '" + evt.target_device +
                                              "' missing emitter_id in payload"});
+            } else if (!has_string_payload(evt, "emitter_id")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V020_IMPAIRMENT_CHANGE_INVALID_EMITTER",
+                                         "Impairment change event emitter_id must be a string"});
+            } else if (!has_non_empty_string_payload(evt, "emitter_id")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V020_IMPAIRMENT_CHANGE_EMPTY_EMITTER",
+                                         "Impairment change event emitter_id must be non-empty"});
             }
             if (!evt.payload.contains("impairment")) {
                 result.errors.push_back({ErrorCategory::Validation,
                                          "V020_IMPAIRMENT_CHANGE_MISSING_IMPAIRMENT",
                                          "Impairment change event for device '" + evt.target_device +
                                              "' missing impairment name in payload"});
+            } else if (!has_string_payload(evt, "impairment")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V020_IMPAIRMENT_CHANGE_INVALID_IMPAIRMENT",
+                                         "Impairment change event impairment must be a string"});
+            } else if (!has_non_empty_string_payload(evt, "impairment")) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V020_IMPAIRMENT_CHANGE_EMPTY_IMPAIRMENT",
+                                         "Impairment change event impairment must be non-empty"});
+            }
+            if (evt.payload.contains("enabled") && !evt.payload.at("enabled").is_boolean()) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V020_IMPAIRMENT_CHANGE_INVALID_ENABLED",
+                                         "Impairment change event enabled must be a boolean when provided"});
             }
         }
     }
@@ -323,11 +550,23 @@ void check_repeat(const Scenario& scenario, ValidationResult& result) {
                                          "V017_INVALID_REPEAT_COUNT",
                                          "Emitter '" + em.id + "': repeat count must be >= 1"});
             }
+            if (em.repeat->count > kMaxRepeatCount) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V017_INVALID_REPEAT_COUNT",
+                                         "Emitter '" + em.id + "': repeat count must be <= " +
+                                             std::to_string(kMaxRepeatCount)});
+            }
             if (em.repeat->count > 1 && em.repeat->interval_sec <= 0.0) {
                 result.errors.push_back({ErrorCategory::Validation,
                                          "V018_INVALID_REPEAT_INTERVAL",
                                          "Emitter '" + em.id +
                                              "': repeat interval_sec must be > 0 when count > 1"});
+            }
+            if (!std::isfinite(em.repeat->interval_sec) || em.repeat->interval_sec < 0.0) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V018_INVALID_REPEAT_INTERVAL",
+                                         "Emitter '" + em.id +
+                                             "': repeat interval_sec must be finite and >= 0"});
             }
         }
     }
@@ -351,13 +590,25 @@ void check_channels(const Scenario& scenario,
         }
     }
 
-    if (scenario.channel_defs.empty()) return;
-
     std::unordered_set<std::string> seen_channel_ids;
     std::unordered_set<std::string> device_index_pairs;
 
     for (const auto& ch : scenario.channel_defs) {
-        if (!seen_channel_ids.insert(ch.id).second) {
+        if (!std::isfinite(ch.rf.freq_hz) || ch.rf.freq_hz <= 0.0) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V027_INVALID_CHANNEL_FREQ",
+                                     "Channel '" + ch.id + "': rf.freq_hz must be > 0"});
+        }
+        if (!std::isfinite(ch.rf.rate_sps) || ch.rf.rate_sps <= 0.0) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V027_INVALID_CHANNEL_RATE",
+                                     "Channel '" + ch.id + "': rf.rate_sps must be > 0"});
+        }
+        if (ch.id.empty()) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V020_EMPTY_CHANNEL_ID",
+                                     "Channel id must be set"});
+        } else if (!seen_channel_ids.insert(ch.id).second) {
             result.errors.push_back({ErrorCategory::Validation,
                                      "V020_DUPLICATE_CHANNEL_ID",
                                      "Duplicate channel id: '" + ch.id + "'"});
@@ -375,12 +626,39 @@ void check_channels(const Scenario& scenario,
         }
     }
 
+    std::unordered_set<std::string> seen_sync_group_ids;
     for (const auto& sg : scenario.sync_groups) {
+        if (sg.id.empty()) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V028_SYNC_MISSING_ID",
+                                     "Sync group id must be set"});
+        } else if (!seen_sync_group_ids.insert(sg.id).second) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V028_DUPLICATE_SYNC_ID",
+                                     "Duplicate sync group id: '" + sg.id + "'"});
+        }
+        if (sg.channels.empty()) {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V029_SYNC_NO_CHANNELS",
+                                     "Sync group '" + sg.id + "' must reference at least one channel"});
+        }
+        if (sg.mode != "coherent" && sg.mode != "independent") {
+            result.errors.push_back({ErrorCategory::Validation,
+                                     "V030_SYNC_INVALID_MODE",
+                                     "Sync group '" + sg.id + "' mode must be 'coherent' or 'independent'"});
+        }
+
+        std::unordered_set<std::string> seen_sync_channels;
         for (const auto& cid : sg.channels) {
             if (!channel_ids.count(cid)) {
                 result.errors.push_back({ErrorCategory::Validation,
                                          "V024_SYNC_UNKNOWN_CHANNEL",
                                          "Sync group '" + sg.id + "' references unknown channel '" + cid + "'"});
+            }
+            if (!seen_sync_channels.insert(cid).second) {
+                result.errors.push_back({ErrorCategory::Validation,
+                                         "V031_SYNC_DUPLICATE_CHANNEL",
+                                         "Sync group '" + sg.id + "' references channel '" + cid + "' more than once"});
             }
         }
         if (sg.mode == "coherent" && sg.channels.size() >= 2) {
@@ -439,12 +717,13 @@ void check_regulatory_bands(const Scenario& scenario,
     }
 }
 
-void check_high_power(const Scenario& scenario, ValidationResult& result) {
+void check_high_power(const Scenario& scenario,
+                      const std::unordered_map<std::string, const WaveformDef*>& waveform_map,
+                      ValidationResult& result) {
     for (const auto& em : scenario.emitters) {
-        if (!em.waveform.has_value()) continue;
-        const auto& wf = *em.waveform;
+        const auto* waveform = waveform_for_emitter(em, waveform_map);
+        if (waveform == nullptr) continue;
         double gain = 0.0;
-        double amplitude = 0.0;
 
         for (const auto& dev : scenario.devices) {
             if (dev.id == em.device) {
@@ -452,9 +731,7 @@ void check_high_power(const Scenario& scenario, ValidationResult& result) {
                 break;
             }
         }
-        if (wf.params.contains("amplitude")) {
-            amplitude = wf.params["amplitude"].get<double>();
-        }
+        const double amplitude = get_number_param(waveform->params, "amplitude").value_or(0.0);
         if (gain > 25.0 && amplitude > 0.5) {
             result.warnings.push_back({ErrorCategory::QualityWarning,
                                        "W_HIGH_POWER",
@@ -466,7 +743,7 @@ void check_high_power(const Scenario& scenario, ValidationResult& result) {
     for (const auto& wf : scenario.waveforms) {
         double amplitude = 0.0;
         if (wf.params.contains("amplitude")) {
-            amplitude = wf.params["amplitude"].get<double>();
+            amplitude = get_number_param(wf.params, "amplitude").value_or(0.0);
         }
         if (wf.target_power_dbm.has_value() && amplitude > 0.5) {
             result.warnings.push_back({ErrorCategory::QualityWarning,
@@ -478,14 +755,15 @@ void check_high_power(const Scenario& scenario, ValidationResult& result) {
     }
 }
 
-void check_safety(const Scenario& scenario, ValidationResult& result) {
+void check_safety(const Scenario& scenario,
+                  const std::unordered_map<std::string, const WaveformDef*>& waveform_map,
+                  ValidationResult& result) {
     auto profile = common::get_lab_safe_profile();
     for (const auto& dev : scenario.devices) {
         double amplitude = 0.0;
         for (const auto& em : scenario.emitters) {
-            if (em.device == dev.id && em.waveform.has_value() &&
-                em.waveform->params.contains("amplitude")) {
-                amplitude = std::max(amplitude, em.waveform->params["amplitude"].get<double>());
+            if (em.device == dev.id) {
+                amplitude = std::max(amplitude, emitter_amplitude(em, waveform_map));
             }
         }
         auto errors = common::check_safety_profile(profile, dev.rf.gain_db, amplitude, dev.rf.freq_hz);
@@ -512,9 +790,11 @@ ValidationResult validate(const Scenario& scenario) {
     }
 
     std::unordered_set<std::string> waveform_ids;
+    std::unordered_map<std::string, const WaveformDef*> waveform_map;
     for (const auto& wf : scenario.waveforms) {
         if (wf.id.has_value()) {
             waveform_ids.insert(*wf.id);
+            waveform_map[*wf.id] = &wf;
         }
         validate_waveform(wf, result);
     }
@@ -523,13 +803,13 @@ ValidationResult validate(const Scenario& scenario) {
         check_emitter(em, device_ids, device_map, waveform_ids, result);
     }
 
-    check_overlaps(scenario, result);
-    check_events(scenario, device_ids, result);
     check_repeat(scenario, result);
+    check_overlaps(scenario, waveform_map, result);
+    check_events(scenario, device_ids, result);
     check_channels(scenario, device_ids, result);
     check_regulatory_bands(scenario, device_map, result);
-    check_high_power(scenario, result);
-    check_safety(scenario, result);
+    check_high_power(scenario, waveform_map, result);
+    check_safety(scenario, waveform_map, result);
 
     return result;
 }

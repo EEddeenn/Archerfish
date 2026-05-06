@@ -1,15 +1,134 @@
 #include <catch2/catch_test_macros.hpp>
+#include <archerfish/cli/app.hpp>
+#include <archerfish/cli/cmd_dryrun.hpp>
 
 #include <algorithm>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <functional>
 #include <map>
 #include <sstream>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
+namespace fs = std::filesystem;
+using namespace archerfish::cli;
+
 namespace {
+
+struct TempDirGuard {
+    fs::path original;
+    fs::path temp_dir;
+
+    TempDirGuard() {
+        original = fs::current_path();
+        temp_dir = fs::temp_directory_path() / ("archerfish_test_dryrun_" + std::to_string(::getpid()));
+        fs::create_directories(temp_dir);
+        fs::current_path(temp_dir);
+    }
+
+    ~TempDirGuard() {
+        fs::current_path(original);
+        fs::remove_all(temp_dir);
+    }
+};
+
+std::string capture_stdout(const std::function<int()>& fn, int& rc) {
+    int pipefd[2];
+    REQUIRE(::pipe(pipefd) == 0);
+
+    int saved_stdout = ::dup(STDOUT_FILENO);
+    REQUIRE(saved_stdout != -1);
+    REQUIRE(::dup2(pipefd[1], STDOUT_FILENO) != -1);
+    ::close(pipefd[1]);
+
+    rc = fn();
+    std::fflush(stdout);
+
+    REQUIRE(::dup2(saved_stdout, STDOUT_FILENO) != -1);
+    ::close(saved_stdout);
+
+    std::string output;
+    char buffer[4096];
+    ssize_t bytes_read = 0;
+    while ((bytes_read = ::read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+        output.append(buffer, static_cast<size_t>(bytes_read));
+    }
+    ::close(pipefd[0]);
+
+    return output;
+}
+
+void write_dryrun_scenario(const fs::path& path) {
+    std::ofstream f(path);
+    f << R"({
+  "metadata": { "name": "dryrun_chirp" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 915000000.0,
+        "rate_sps": 20000000.0,
+        "gain_db": 18.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "chirp1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 1.0,
+      "duration_sec": 0.02,
+      "waveform": {
+        "type": "chirp",
+        "f0_hz": -2000000.0,
+        "f1_hz": 2000000.0,
+        "amplitude": 0.3
+      }
+    }
+  ]
+})";
+}
+
+void write_dryrun_scenario_with_bad_display_params(const fs::path& path) {
+    std::ofstream f(path);
+    f << R"({
+  "metadata": { "name": "dryrun_bad_display_params" },
+  "devices": [
+    {
+      "id": "usrp0",
+      "channel": 0,
+      "rf": {
+        "freq_hz": 915000000.0,
+        "rate_sps": 20000000.0,
+        "gain_db": 18.0
+      }
+    }
+  ],
+  "emitters": [
+    {
+      "id": "chirp1",
+      "device": "usrp0",
+      "channel": 0,
+      "start_after_sec": 1.0,
+      "duration_sec": 0.02,
+      "waveform": {
+        "type": "chirp",
+        "f0_hz": "not a number",
+        "f1_hz": 2000000.0,
+        "amplitude": 0.3
+      }
+    }
+  ]
+})";
+}
 
 struct TestEmitter {
     std::string id;
@@ -74,6 +193,46 @@ std::string generate_test_timeline(const TestScenario& scenario) {
 }
 
 } // namespace
+
+TEST_CASE("Dry-run command emits readable text timeline", "[dryrun]") {
+    TempDirGuard guard;
+    write_dryrun_scenario("scenario.json");
+
+    CliOptions opts;
+    opts.json_output = false;
+
+    int rc = -1;
+    auto output = capture_stdout([&]() {
+        return cmd_dryrun(opts, "scenario.json");
+    }, rc);
+
+    REQUIRE(rc == 0);
+    REQUIRE_FALSE(output.empty());
+    CHECK(output.find("dryrun_chirp") != std::string::npos);
+    CHECK(output.find("chirp1") != std::string::npos);
+    CHECK(output.find("Chirp f0=-2.0 MHz -> 2.0 MHz") != std::string::npos);
+    CHECK(output.find("---") != std::string::npos);
+    CHECK(std::all_of(output.begin(), output.end(), [](unsigned char c) {
+        return c < 0x80;
+    }));
+}
+
+TEST_CASE("Dry-run text output tolerates malformed optional display parameters", "[dryrun]") {
+    TempDirGuard guard;
+    write_dryrun_scenario_with_bad_display_params("scenario.json");
+
+    CliOptions opts;
+    opts.json_output = false;
+
+    int rc = -1;
+    auto output = capture_stdout([&]() {
+        return cmd_dryrun(opts, "scenario.json");
+    }, rc);
+
+    REQUIRE(rc == 0);
+    CHECK(output.find("dryrun_bad_display_params") != std::string::npos);
+    CHECK(output.find("Chirp f0=0 Hz -> 2.0 MHz") != std::string::npos);
+}
 
 TEST_CASE("Dry-run timeline generation with single device and emitter", "[dryrun]") {
     TestScenario scenario;

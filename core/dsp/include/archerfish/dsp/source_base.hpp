@@ -33,8 +33,15 @@ public:
 
     static void validate_positive(double value, const char* name);
     static void validate_non_negative(double value, const char* name);
+    [[nodiscard]] static size_t checked_sample_count(double sample_rate, double duration_sec);
+    [[nodiscard]] static size_t checked_positive_rounded_count(double value, const char* name);
 
 protected:
+    static double number_param(const nlohmann::json& params, const char* key);
+    static std::string string_param(const nlohmann::json& params, const char* key);
+    static bool bool_param(const nlohmann::json& params, const char* key);
+    static int int_param(const nlohmann::json& params, const char* key);
+
     double amplitude_{0.2};
     double sample_rate_{1e6};
     std::optional<double> duration_sec_;

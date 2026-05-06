@@ -110,3 +110,34 @@ TEST_CASE("RenderWorker queue receives all blocks in order", "[runtime][render]"
     size_t expected = static_cast<size_t>(1e6 * 0.01);
     REQUIRE(total == expected);
 }
+
+TEST_CASE("RenderWorker destructor stops and joins running worker", "[runtime][render]") {
+    SampleQueue queue(2);
+    RenderJob job;
+    job.waveform_config = nlohmann::json{{"type", "cw"}, {"frequency_hz", 1000.0}, {"amplitude", 0.5}};
+    job.sample_rate = 1e6;
+    job.duration_sec = 5.0;
+    job.block_size = 4096;
+
+    {
+        RenderWorker worker(queue, job);
+        worker.start();
+    }
+
+    SUCCEED("RenderWorker destructor returned without std::terminate");
+}
+
+TEST_CASE("RenderWorker rejects double start", "[runtime][render]") {
+    SampleQueue queue(64);
+    RenderJob job;
+    job.waveform_config = nlohmann::json{{"type", "cw"}, {"frequency_hz", 1000.0}, {"amplitude", 0.5}};
+    job.sample_rate = 1e6;
+    job.duration_sec = 0.001;
+    job.block_size = 4096;
+
+    RenderWorker worker(queue, job);
+    worker.start();
+    CHECK_THROWS_AS(worker.start(), std::logic_error);
+    worker.request_stop();
+    worker.join();
+}

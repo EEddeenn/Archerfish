@@ -5,15 +5,21 @@
 #include <cstddef>
 
 #include "archerfish/common/constants.hpp"
+#include "validation.hpp"
 
 namespace archerfish::impairments {
 
 AmplitudeRippleImpairment::AmplitudeRippleImpairment(double ripple_depth, double ripple_freq_hz, double sample_rate)
     : ripple_depth_(ripple_depth),
       ripple_freq_hz_(ripple_freq_hz),
-      sample_rate_(sample_rate) {}
+      sample_rate_(sample_rate) {
+    detail::require_finite(ripple_depth_, "Amplitude ripple depth");
+    detail::require_finite(ripple_freq_hz_, "Amplitude ripple frequency");
+    detail::require_positive_finite(sample_rate_, "Amplitude ripple sample rate");
+}
 
 void AmplitudeRippleImpairment::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "AmplitudeRippleImpairment");
     if (!enabled_ || ripple_depth_ == 0.0) {
         return;
     }

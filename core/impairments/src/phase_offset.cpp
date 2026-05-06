@@ -4,12 +4,17 @@
 #include <complex>
 #include <cstddef>
 
+#include "validation.hpp"
+
 namespace archerfish::impairments {
 
 PhaseOffsetImpairment::PhaseOffsetImpairment(double phase_rad)
-    : phase_rad_(phase_rad) {}
+    : phase_rad_(phase_rad) {
+    detail::require_finite(phase_rad_, "Phase offset");
+}
 
 void PhaseOffsetImpairment::apply(std::complex<float>* data, size_t count) {
+    detail::require_apply_buffer(data, count, "PhaseOffsetImpairment");
     if (!enabled_) {
         return;
     }

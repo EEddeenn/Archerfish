@@ -2,6 +2,8 @@
 #include <archerfish/cli/app.hpp>
 #include <CLI/CLI.hpp>
 
+#include <vector>
+
 using namespace archerfish::cli;
 
 TEST_CASE("build_app returns valid CLI11 app", "[cli]") {
@@ -44,4 +46,24 @@ TEST_CASE("version flag works", "[cli]") {
 
     const char* argv[] = {"archerfish", "--version"};
     REQUIRE_THROWS_AS(app->parse(2, const_cast<char**>(argv)), CLI::CallForVersion);
+}
+
+TEST_CASE("command groups require an action subcommand", "[cli]") {
+    auto run_args = [](std::initializer_list<const char*> args) {
+        std::vector<char*> argv;
+        argv.reserve(args.size());
+        for (const char* arg : args) {
+            argv.push_back(const_cast<char*>(arg));
+        }
+        return run(static_cast<int>(argv.size()), argv.data());
+    };
+
+    CHECK(run_args({"archerfish", "devices"}) != 0);
+    CHECK(run_args({"archerfish", "scenario"}) != 0);
+    CHECK(run_args({"archerfish", "wave"}) != 0);
+    CHECK(run_args({"archerfish", "wave", "gen"}) != 0);
+    CHECK(run_args({"archerfish", "report"}) != 0);
+    CHECK(run_args({"archerfish", "metrics"}) != 0);
+    CHECK(run_args({"archerfish", "schema"}) != 0);
+    CHECK(run_args({"archerfish", "calib"}) != 0);
 }

@@ -2,6 +2,9 @@
 
 #include "archerfish/reporting/metrics.hpp"
 
+#include <limits>
+#include <stdexcept>
+
 using namespace archerfish::reporting;
 
 TEST_CASE("Metrics default construction", "[reporting][metrics]") {
@@ -72,4 +75,71 @@ TEST_CASE("Metrics round-trip preserves all fields", "[reporting][metrics]") {
     CHECK(restored.error_count == original.error_count);
     CHECK(restored.total_samples_sent == original.total_samples_sent);
     CHECK(restored.scenario_hash == original.scenario_hash);
+}
+
+TEST_CASE("Metrics rejects invalid numeric fields", "[reporting][metrics]") {
+    Metrics original;
+    original.queue_depth_stats = {1.0, 2.0, 0};
+    original.scenario_hash = "abc";
+    auto j = original.to_json();
+
+    auto negative_count = j;
+    negative_count["underrun_count"] = -1;
+    CHECK_THROWS_AS(Metrics::from_json(negative_count), std::invalid_argument);
+
+    auto fractional_count = j;
+    fractional_count["underrun_count"] = 1.5;
+    CHECK_THROWS_AS(Metrics::from_json(fractional_count), std::invalid_argument);
+
+    auto bad_time = j;
+    bad_time["tx_duration_sec"] = std::numeric_limits<double>::quiet_NaN();
+    CHECK_THROWS_AS(Metrics::from_json(bad_time), std::invalid_argument);
+
+    auto bad_time_type = j;
+    bad_time_type["tx_duration_sec"] = "soon";
+    CHECK_THROWS_AS(Metrics::from_json(bad_time_type), std::invalid_argument);
+
+    auto bad_queue = j;
+    bad_queue["queue_depth_stats"]["avg_depth"] = -1.0;
+    CHECK_THROWS_AS(Metrics::from_json(bad_queue), std::invalid_argument);
+
+    auto impossible_queue = j;
+    impossible_queue["queue_depth_stats"]["avg_depth"] = 3.0;
+    impossible_queue["queue_depth_stats"]["max_depth"] = 2.0;
+    CHECK_THROWS_AS(Metrics::from_json(impossible_queue), std::invalid_argument);
+
+    auto bad_hash = j;
+    bad_hash["scenario_hash"] = 42;
+    CHECK_THROWS_AS(Metrics::from_json(bad_hash), std::invalid_argument);
+}
+
+TEST_CASE("Metrics rejects inconsistent timing windows", "[reporting][metrics]") {
+    Metrics original;
+    original.start_actual_sec = 10.0;
+    original.stop_actual_sec = 12.5;
+    original.tx_duration_sec = 2.5;
+    original.queue_depth_stats = {1.0, 2.0, 0};
+    original.scenario_hash = "abc";
+    auto j = original.to_json();
+
+    auto stop_before_start = j;
+    stop_before_start["stop_actual_sec"] = 9.0;
+    CHECK_THROWS_AS(Metrics::from_json(stop_before_start), std::invalid_argument);
+
+    auto mismatched_duration = j;
+    mismatched_duration["tx_duration_sec"] = 1.0;
+    CHECK_THROWS_AS(Metrics::from_json(mismatched_duration), std::invalid_argument);
+}
+
+TEST_CASE("Metrics rejects invalid object containers", "[reporting][metrics]") {
+    Metrics original;
+    original.queue_depth_stats = {1.0, 2.0, 0};
+    original.scenario_hash = "abc";
+    auto j = original.to_json();
+
+    CHECK_THROWS_AS(Metrics::from_json(nlohmann::json::array()), std::invalid_argument);
+
+    auto bad_queue_container = j;
+    bad_queue_container["queue_depth_stats"] = "none";
+    CHECK_THROWS_AS(Metrics::from_json(bad_queue_container), std::invalid_argument);
 }

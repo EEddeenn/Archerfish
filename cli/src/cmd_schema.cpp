@@ -15,6 +15,10 @@ namespace archerfish::cli {
 
 namespace {
 
+std::string string_or_empty(const nlohmann::json& value) {
+    return value.is_string() ? value.get<std::string>() : "";
+}
+
 std::string read_schema_json() {
     std::string schema_path;
     // Try install location first
@@ -48,7 +52,8 @@ std::string print_human(const nlohmann::json& schema) {
     out << "Required fields:\n";
     if (schema.contains("required") && schema["required"].is_array()) {
         for (const auto& r : schema["required"]) {
-            out << fmt::format("  - {}\n", r.get<std::string>());
+            const auto field = string_or_empty(r);
+            if (!field.empty()) out << fmt::format("  - {}\n", field);
         }
     }
     out << "\n";
@@ -59,7 +64,8 @@ std::string print_human(const nlohmann::json& schema) {
         schema["$defs"]["waveform"]["properties"].contains("type") &&
         schema["$defs"]["waveform"]["properties"]["type"].contains("enum")) {
         for (const auto& t : schema["$defs"]["waveform"]["properties"]["type"]["enum"]) {
-            out << fmt::format("  - {}\n", t.get<std::string>());
+            const auto type = string_or_empty(t);
+            if (!type.empty()) out << fmt::format("  - {}\n", type);
         }
     }
     out << "\n";
@@ -68,7 +74,10 @@ std::string print_human(const nlohmann::json& schema) {
     if (schema.contains("$defs") && schema["$defs"].contains("impairments") &&
         schema["$defs"]["impairments"].contains("properties")) {
         for (const auto& [key, val] : schema["$defs"]["impairments"]["properties"].items()) {
-            std::string desc = val.value("description", "");
+            std::string desc;
+            if (val.is_object() && val.contains("description")) {
+                desc = string_or_empty(val["description"]);
+            }
             out << fmt::format("  - {:<35s} {}\n", key, desc);
         }
     }
@@ -86,7 +95,8 @@ std::string print_markdown(const nlohmann::json& schema) {
         schema["$defs"]["waveform"]["properties"].contains("type") &&
         schema["$defs"]["waveform"]["properties"]["type"].contains("enum")) {
         for (const auto& t : schema["$defs"]["waveform"]["properties"]["type"]["enum"]) {
-            std::string type = t.get<std::string>();
+            std::string type = string_or_empty(t);
+            if (type.empty()) continue;
             std::string params;
             if (type == "cw") params = "`amplitude`";
             else if (type == "chirp") params = "`f0_hz`, `f1_hz`, `amplitude`";
@@ -94,6 +104,8 @@ std::string print_markdown(const nlohmann::json& schema) {
             else if (type == "bpsk" || type == "qpsk" || type == "8psk")
                 params = "`symbol_rate`, `samples_per_symbol`, `rrc_alpha`, `amplitude`";
             else if (type == "qam16" || type == "qam64")
+                params = "`symbol_rate`, `samples_per_symbol`, `rrc_alpha`, `amplitude`";
+            else if (type == "apsk16" || type == "apsk32")
                 params = "`symbol_rate`, `samples_per_symbol`, `rrc_alpha`, `amplitude`";
             else if (type == "multi_tone") params = "`tones` (array of `{frequency_hz, amplitude}`)";
             else if (type == "file") params = "`path`, `loop`";
@@ -103,6 +115,7 @@ std::string print_markdown(const nlohmann::json& schema) {
             else if (type == "am") params = "`mod_freq_hz`, `mod_depth`, `amplitude`";
             else if (type == "fm") params = "`mod_freq_hz`, `deviation_hz`, `amplitude`";
             else if (type == "pm") params = "`mod_freq_hz`, `mod_index`, `amplitude`";
+            else if (type == "ofdm") params = "`fft_size`, `cyclic_prefix_size`, `active_subcarriers`, `amplitude`";
             out << fmt::format("| `{}` | {} |\n", type, params);
         }
     }
@@ -114,6 +127,11 @@ std::string print_markdown(const nlohmann::json& schema) {
 
 int cmd_schema_print(const CliOptions& opts, bool json, bool markdown) {
     try {
+        if (json && markdown) {
+            fmt::print(stderr, "Error: choose only one schema output format\n");
+            return static_cast<int>(ExitCode::InputValidationFailure);
+        }
+
         std::string raw = read_schema_json();
         auto schema = nlohmann::json::parse(raw);
         (void)opts;

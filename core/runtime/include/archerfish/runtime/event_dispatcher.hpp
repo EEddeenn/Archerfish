@@ -2,8 +2,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -42,6 +44,7 @@ struct ScheduledEvent {
 class EventDispatcher {
 public:
     EventDispatcher() = default;
+    ~EventDispatcher();
 
     void schedule(double time_sec, std::function<void()> callback);
     void start();
@@ -49,6 +52,8 @@ public:
     void cancel();
 
     [[nodiscard]] size_t dispatched_count() const;
+    [[nodiscard]] size_t failed_count() const;
+    [[nodiscard]] bool has_failed() const;
     [[nodiscard]] size_t total_events() const;
     [[nodiscard]] const std::vector<MarkerDispatch>& marker_dispatches() const;
     [[nodiscard]] const std::vector<WaveformSwitchDispatch>& waveform_switch_dispatches() const;
@@ -61,9 +66,12 @@ private:
     std::vector<WaveformSwitchDispatch> waveform_switch_dispatches_;
     std::vector<ImpairmentChangeDispatch> impairment_change_dispatches_;
     std::thread thread_;
+    std::mutex mutex_;
+    std::condition_variable cv_;
     std::atomic<bool> running_{false};
     std::atomic<bool> cancelled_{false};
     std::atomic<size_t> dispatched_count_{0};
+    std::atomic<size_t> failed_count_{0};
     std::chrono::steady_clock::time_point epoch_;
 };
 

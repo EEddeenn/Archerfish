@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 
 using namespace archerfish::dsp;
@@ -48,6 +49,49 @@ TEST_CASE("write_sidecar creates valid JSON file", "[metadata]") {
     cleanup(path);
 }
 
+TEST_CASE("write_sidecar rejects invalid metadata", "[metadata]") {
+    auto path = make_temp_path("test_invalid_write.cf32");
+    cleanup(path);
+
+    WaveformMetadata meta;
+    meta.sample_rate = 0.0;
+    meta.peak_amplitude = 0.2;
+    meta.rms_amplitude = 0.1;
+    meta.crest_factor = 2.0;
+    meta.nominal_bandwidth = 0.0;
+    meta.duration_sec = 1.0;
+
+    REQUIRE_FALSE(write_sidecar(path, meta, "cw", 100, 800));
+    REQUIRE_FALSE(std::filesystem::exists(sidecar_path(path)));
+
+    meta.sample_rate = 1e6;
+    meta.peak_amplitude = std::numeric_limits<double>::quiet_NaN();
+    REQUIRE_FALSE(write_sidecar(path, meta, "cw", 100, 800));
+
+    meta.peak_amplitude = 0.2;
+    REQUIRE_FALSE(write_sidecar(path, meta, "", 100, 800));
+
+    cleanup(path);
+}
+
+TEST_CASE("write_sidecar rejects inconsistent raw file size", "[metadata]") {
+    auto path = make_temp_path("test_inconsistent_write.cf32");
+    cleanup(path);
+
+    WaveformMetadata meta;
+    meta.sample_rate = 1e6;
+    meta.peak_amplitude = 0.2;
+    meta.rms_amplitude = 0.1;
+    meta.crest_factor = 2.0;
+    meta.nominal_bandwidth = 0.0;
+    meta.duration_sec = 0.001;
+
+    REQUIRE_FALSE(write_sidecar(path, meta, "cw", 100, 799));
+    REQUIRE_FALSE(std::filesystem::exists(sidecar_path(path)));
+
+    cleanup(path);
+}
+
 TEST_CASE("write then read sidecar preserves all fields", "[metadata]") {
     auto path = make_temp_path("test_roundtrip.cf32");
     cleanup(path);
@@ -85,6 +129,36 @@ TEST_CASE("write then read sidecar preserves all fields", "[metadata]") {
     cleanup(path);
 }
 
+TEST_CASE("read_sidecar rejects inconsistent raw file size", "[metadata]") {
+    auto path = make_temp_path("test_inconsistent_read.cf32");
+    cleanup(path);
+
+    auto meta_path = sidecar_path(path);
+    std::ofstream out(meta_path);
+    out << R"({
+        "format_version": 1,
+        "created_utc": "2026-04-04T12:00:00Z",
+        "waveform": {
+            "type": "cw",
+            "sample_rate": 1000000.0,
+            "duration_sec": 1.0,
+            "num_samples": 100,
+            "peak_amplitude": 0.2,
+            "rms_amplitude": 0.1,
+            "crest_factor": 2.0,
+            "nominal_bandwidth": 0.0,
+            "repeats": false
+        },
+        "file": {"format": "cf32", "size_bytes": 799}
+    })";
+    out.close();
+
+    auto result = read_sidecar(path);
+    REQUIRE_FALSE(result.has_value());
+
+    cleanup(path);
+}
+
 TEST_CASE("read_sidecar returns nullopt for nonexistent file", "[metadata]") {
     auto path = make_temp_path("nonexistent.cf32");
     auto result = read_sidecar(path);
@@ -117,6 +191,126 @@ TEST_CASE("read_sidecar returns nullopt for missing waveform key", "[metadata]")
 
     auto result = read_sidecar(path);
     REQUIRE_FALSE(result.has_value());
+
+    cleanup(path);
+}
+
+TEST_CASE("read_sidecar rejects missing or unsupported format versions", "[metadata]") {
+    auto path = make_temp_path("test_bad_format_version.cf32");
+    cleanup(path);
+
+    auto meta_path = sidecar_path(path);
+    auto write_payload = [&](const std::string& format_version_field) {
+        std::ofstream out(meta_path);
+        out << R"({)"
+            << format_version_field
+            << R"(
+        "created_utc": "2026-04-04T12:00:00Z",
+        "waveform": {
+            "type": "cw",
+            "sample_rate": 1000000.0,
+            "duration_sec": 1.0,
+            "num_samples": 100,
+            "peak_amplitude": 0.2,
+            "rms_amplitude": 0.1,
+            "crest_factor": 2.0,
+            "nominal_bandwidth": 0.0,
+            "repeats": false
+        },
+        "file": {"format": "cf32", "size_bytes": 800}
+    })";
+    };
+
+    write_payload("");
+    CHECK_FALSE(read_sidecar(path).has_value());
+
+    write_payload(R"("format_version": 2,)");
+    CHECK_FALSE(read_sidecar(path).has_value());
+
+    write_payload(R"("format_version": "1",)");
+    CHECK_FALSE(read_sidecar(path).has_value());
+
+    cleanup(path);
+}
+
+TEST_CASE("read_sidecar returns nullopt for invalid field types", "[metadata]") {
+    auto path = make_temp_path("test_bad_field_types.cf32");
+    cleanup(path);
+
+    auto meta_path = sidecar_path(path);
+    std::ofstream out(meta_path);
+    out << R"({
+        "format_version": 1,
+        "created_utc": "2026-04-04T12:00:00Z",
+        "waveform": {
+            "type": "cw",
+            "sample_rate": "1000000",
+            "duration_sec": 1.0,
+            "num_samples": 100,
+            "peak_amplitude": 0.2,
+            "rms_amplitude": 0.1,
+            "crest_factor": 2.0,
+            "nominal_bandwidth": 0.0,
+            "repeats": false
+        },
+        "file": {"format": "cf32", "size_bytes": 800}
+    })";
+    out.close();
+
+    auto result = read_sidecar(path);
+    REQUIRE_FALSE(result.has_value());
+
+    cleanup(path);
+}
+
+TEST_CASE("read_sidecar returns nullopt for negative sizes and non-finite metrics", "[metadata]") {
+    auto path = make_temp_path("test_bad_numeric_values.cf32");
+    cleanup(path);
+
+    auto meta_path = sidecar_path(path);
+    std::ofstream out(meta_path);
+    out << R"({
+        "format_version": 1,
+        "created_utc": "2026-04-04T12:00:00Z",
+        "waveform": {
+            "type": "cw",
+            "sample_rate": 1000000.0,
+            "duration_sec": 1.0,
+            "num_samples": -1,
+            "peak_amplitude": 0.2,
+            "rms_amplitude": 0.1,
+            "crest_factor": 2.0,
+            "nominal_bandwidth": 0.0,
+            "repeats": false
+        },
+        "file": {"format": "cf32", "size_bytes": 800}
+    })";
+    out.close();
+
+    auto negative_result = read_sidecar(path);
+    REQUIRE_FALSE(negative_result.has_value());
+
+    std::ofstream out2(meta_path);
+    out2 << R"({
+        "format_version": 1,
+        "created_utc": "2026-04-04T12:00:00Z",
+        "waveform": {
+            "type": "cw",
+            "sample_rate": 1000000.0,
+            "duration_sec": -1.0,
+            "num_samples": 100,
+            "peak_amplitude": 0.2,
+            "rms_amplitude": 0.1,
+            "crest_factor": 2.0,
+            "nominal_bandwidth": 0.0,
+            "repeats": false
+        },
+        "file": {"format": "cf32", "size_bytes": 800}
+    })";
+    out2.close();
+
+    auto duration_result = read_sidecar(path);
+    REQUIRE_FALSE(duration_result.has_value());
 
     cleanup(path);
 }

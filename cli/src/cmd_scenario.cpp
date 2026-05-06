@@ -5,20 +5,92 @@
 #include "archerfish/scenario/plan_io.hpp"
 #include "archerfish/runtime/runtime.hpp"
 #include "archerfish/hal/hal_factory.hpp"
+#include "archerfish/reporting/run_directory.hpp"
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <memory>
+#include <string_view>
+#include <vector>
+
 namespace archerfish::cli {
 
 namespace {
+
+bool is_blank(std::string_view value) {
+    return std::all_of(value.begin(), value.end(), [](unsigned char c) { return std::isspace(c) != 0; });
+}
 
 void print_errors(const common::ErrorList& errors) {
     for (const auto& e : errors) {
         fmt::print(stderr, "  [{}] {} — {}\n", common::category_to_string(e.category), e.code, e.message);
     }
 }
+
+reporting::Metrics to_reporting_metrics(const runtime::Runtime::RunMetrics& metrics) {
+    reporting::Metrics out;
+    out.start_requested_sec = metrics.actual_start_sec;
+    out.start_actual_sec = metrics.actual_start_sec;
+    out.stop_actual_sec = metrics.actual_stop_sec;
+    out.tx_duration_sec = metrics.actual_duration_sec;
+    out.underrun_count = metrics.underruns;
+    out.total_samples_sent = metrics.total_samples_sent;
+    return out;
+}
+
+reporting::Report make_run_report(const scenario::Scenario& scenario,
+                                   const scenario::Plan& plan,
+                                   const runtime::Runtime::RunMetrics& metrics,
+                                   const std::string& target_device_id,
+                                   const std::vector<runtime::MarkerDispatch>& markers,
+                                   const std::vector<std::string>& artifact_paths) {
+    reporting::Report report;
+    report.scenario_name = scenario.metadata.name;
+    report.status = "completed";
+    report.planned_start_sec = 0.0;
+    report.actual_start_sec = metrics.actual_start_sec;
+    report.actual_stop_sec = metrics.actual_stop_sec;
+    report.actual_duration_sec = metrics.actual_duration_sec;
+    report.artifact_paths = artifact_paths;
+
+    const std::string device_type = target_device_id == "stub0" ? "stub" : "usrp";
+    for (const auto& ch : plan.channels) {
+        report.devices.push_back({ch.device_id, device_type, ch.channel_index});
+    }
+    for (const auto& marker : markers) {
+        report.marker_events.push_back({marker.name, marker.planned_time_sec, marker.wall_clock_sec});
+    }
+    return report;
+}
+
+class ScopedSpdlogLevel {
+public:
+    ScopedSpdlogLevel(bool active, spdlog::level::level_enum level) : logger_(spdlog::default_logger()), active_(active && logger_) {
+        if (active_) {
+            previous_ = logger_->level();
+            logger_->set_level(level);
+        }
+    }
+
+    ~ScopedSpdlogLevel() {
+        if (active_) {
+            logger_->set_level(previous_);
+        }
+    }
+
+    ScopedSpdlogLevel(const ScopedSpdlogLevel&) = delete;
+    ScopedSpdlogLevel& operator=(const ScopedSpdlogLevel&) = delete;
+
+private:
+    std::shared_ptr<spdlog::logger> logger_;
+    spdlog::level::level_enum previous_{spdlog::level::info};
+    bool active_{false};
+};
 
 } // namespace
 
@@ -117,6 +189,8 @@ int cmd_scenario_plan(const CliOptions& opts, const std::string& file_path) {
 }
 
 int cmd_scenario_run(const CliOptions& opts, const std::string& file_path) {
+    ScopedSpdlogLevel quiet_json_logs(opts.json_output, spdlog::level::off);
+
     auto parse_result = scenario::parse_scenario(file_path);
     if (!parse_result.has_value()) {
         fmt::print(stderr, "Parse errors:\n");
@@ -146,12 +220,24 @@ int cmd_scenario_run(const CliOptions& opts, const std::string& file_path) {
         return static_cast<int>(ExitCode::PlanningFailure);
     }
 
-    auto discovered = hal::discover_devices();
+    if (!opts.device_id.empty() && is_blank(opts.device_id)) {
+        fmt::print(stderr, "Device id must not be blank.\n");
+        return static_cast<int>(ExitCode::InputValidationFailure);
+    }
+
     std::string target_device_id;
 
     if (!opts.device_id.empty()) {
         target_device_id = opts.device_id;
     } else {
+        std::vector<hal::DiscoveredDevice> discovered;
+        try {
+            discovered = hal::discover_devices();
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "Failed to discover devices: {}\n", e.what());
+            return static_cast<int>(ExitCode::GenericFailure);
+        }
+
         for (const auto& d : discovered) {
             if (d.type == "usrp") {
                 target_device_id = d.id;
@@ -172,8 +258,10 @@ int cmd_scenario_run(const CliOptions& opts, const std::string& file_path) {
         return static_cast<int>(ExitCode::PreparationFailure);
     }
 
-    fmt::print("Using device: {} ({})\n", target_device_id,
-               target_device_id == "stub0" ? "stub" : "USRP");
+    if (!opts.json_output) {
+        fmt::print("Using device: {} ({})\n", target_device_id,
+                   target_device_id == "stub0" ? "stub" : "USRP");
+    }
 
     runtime::Runtime rt(device);
 
@@ -193,6 +281,40 @@ int cmd_scenario_run(const CliOptions& opts, const std::string& file_path) {
     }
 
     auto metrics = rt.get_metrics();
+    std::string run_dir_path;
+    if (scenario.reporting.save_plan || scenario.reporting.save_metrics) {
+        try {
+            reporting::RunDirectory run_dir(std::filesystem::current_path(), scenario.metadata.name);
+            std::vector<std::string> artifact_paths;
+
+            run_dir.save_scenario(scenario);
+            artifact_paths.push_back(run_dir.scenario_path().string());
+
+            if (scenario.reporting.save_plan) {
+                run_dir.save_plan(plan_result.value());
+                artifact_paths.push_back(run_dir.plan_path().string());
+            }
+            if (scenario.reporting.save_metrics) {
+                run_dir.save_metrics(to_reporting_metrics(metrics));
+                artifact_paths.push_back(run_dir.metrics_path().string());
+            }
+
+            auto report = make_run_report(scenario,
+                                          plan_result.value(),
+                                          metrics,
+                                          target_device_id,
+                                          rt.marker_dispatches(),
+                                          artifact_paths);
+            artifact_paths.push_back(run_dir.report_path().string());
+            report.artifact_paths = artifact_paths;
+            run_dir.save_report(report);
+            run_dir.append_log("Run completed");
+            run_dir_path = run_dir.path().string();
+        } catch (const std::exception& e) {
+            fmt::print(stderr, "Failed to write run artifacts: {}\n", e.what());
+            return static_cast<int>(ExitCode::GenericFailure);
+        }
+    }
 
     if (opts.json_output) {
         nlohmann::json out = {
@@ -204,6 +326,9 @@ int cmd_scenario_run(const CliOptions& opts, const std::string& file_path) {
             {"stop_sec", metrics.actual_stop_sec},
             {"duration_sec", metrics.actual_duration_sec},
         };
+        if (!run_dir_path.empty()) {
+            out["run_dir"] = run_dir_path;
+        }
         fmt::print("{}\n", out.dump(2));
     } else {
         fmt::print("Run complete.\n");
@@ -212,6 +337,9 @@ int cmd_scenario_run(const CliOptions& opts, const std::string& file_path) {
         fmt::print("  Blocks sent:  {}\n", metrics.total_blocks_sent);
         fmt::print("  Underruns:    {}\n", metrics.underruns);
         fmt::print("  Duration:     {:.6f} s\n", metrics.actual_duration_sec);
+        if (!run_dir_path.empty()) {
+            fmt::print("  Run dir:      {}\n", run_dir_path);
+        }
     }
 
     return 0;

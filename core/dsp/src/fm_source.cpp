@@ -3,19 +3,36 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 #include "archerfish/common/constants.hpp"
 
 namespace archerfish::dsp {
 
 void FmSource::configure(const nlohmann::json& params) {
+    double next_carrier_freq_hz = carrier_freq_hz_;
+    double next_mod_freq_hz = mod_freq_hz_;
+    double next_deviation_hz = deviation_hz_;
+
+    if (params.contains("carrier_freq_hz")) {
+        next_carrier_freq_hz = number_param(params, "carrier_freq_hz");
+        if (!std::isfinite(next_carrier_freq_hz)) {
+            throw std::invalid_argument("carrier_freq_hz must be finite");
+        }
+    }
+    if (params.contains("mod_freq_hz")) {
+        next_mod_freq_hz = number_param(params, "mod_freq_hz");
+        validate_positive(next_mod_freq_hz, "mod_freq_hz");
+    }
+    if (params.contains("deviation_hz")) {
+        next_deviation_hz = number_param(params, "deviation_hz");
+        validate_non_negative(next_deviation_hz, "deviation_hz");
+    }
     configure_common(params);
-    if (params.contains("carrier_freq_hz"))
-        carrier_freq_hz_ = params["carrier_freq_hz"].get<double>();
-    if (params.contains("mod_freq_hz"))
-        mod_freq_hz_ = params["mod_freq_hz"].get<double>();
-    if (params.contains("deviation_hz"))
-        deviation_hz_ = params["deviation_hz"].get<double>();
+    carrier_freq_hz_ = next_carrier_freq_hz;
+    mod_freq_hz_ = next_mod_freq_hz;
+    deviation_hz_ = next_deviation_hz;
+    phase_ = 0.0;
 }
 
 void FmSource::prepare() {
@@ -24,6 +41,9 @@ void FmSource::prepare() {
 }
 
 size_t FmSource::render_block(std::complex<float>* out, size_t max_samples) {
+    if (max_samples > 0 && out == nullptr) {
+        throw std::invalid_argument("FmSource render output buffer must not be null");
+    }
     size_t to_generate = compute_block_size(max_samples);
     if (to_generate == 0)
         return 0;
@@ -52,8 +72,8 @@ WaveformMetadata FmSource::report_metadata() const {
     WaveformMetadata meta;
     fill_common_metadata(meta);
     meta.peak_amplitude = amplitude_;
-    meta.rms_amplitude = amplitude_ / std::sqrt(2.0);
-    meta.crest_factor = std::sqrt(2.0);
+    meta.rms_amplitude = amplitude_;
+    meta.crest_factor = amplitude_ > 0.0 ? 1.0 : 0.0;
     meta.nominal_bandwidth = 2.0 * (deviation_hz_ + mod_freq_hz_);
     return meta;
 }

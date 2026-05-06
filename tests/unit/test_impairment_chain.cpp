@@ -4,6 +4,7 @@
 #include <cmath>
 #include <complex>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 #include "archerfish/impairments/impairment_chain.hpp"
@@ -21,6 +22,14 @@ TEST_CASE("Empty chain does nothing", "[impairment_chain]") {
     chain.apply(data.data(), data.size());
 
     REQUIRE(data == original);
+}
+
+TEST_CASE("Chain validates null data for nonzero work", "[impairment_chain]") {
+    archerfish::impairments::ImpairmentChain chain;
+    chain.add(std::make_unique<archerfish::impairments::DcOffsetImpairment>(1.0, 0.0));
+
+    REQUIRE_NOTHROW(chain.apply(nullptr, 0));
+    REQUIRE_THROWS_AS(chain.apply(nullptr, 1), std::invalid_argument);
 }
 
 TEST_CASE("Chain with one impairment applies it", "[impairment_chain]") {

@@ -1,22 +1,58 @@
 #include "archerfish/runtime/render_worker.hpp"
 
 #include <algorithm>
+#include <exception>
+#include <optional>
+#include <stdexcept>
 #include <thread>
 
 #include <spdlog/spdlog.h>
 
 #include "archerfish/dsp/source_factory.hpp"
+#include "archerfish/dsp/source_base.hpp"
 #include "archerfish/dsp/waveform_type.hpp"
 
 #include "archerfish/impairments/impairment_chain.hpp"
 
 namespace archerfish::runtime {
 
+namespace {
+
+constexpr size_t kMaxRenderBlockSamples = 16'000'000;
+constexpr size_t kMaxPreRenderSamples = 16'000'000;
+
+std::optional<size_t> render_target_samples(double sample_rate, double duration_sec) {
+    try {
+        return dsp::SourceBase::checked_sample_count(sample_rate, duration_sec);
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+std::string waveform_type_string(const nlohmann::json& config) {
+    if (!config.contains("type") || !config.at("type").is_string()) {
+        return {};
+    }
+    return config.at("type").get<std::string>();
+}
+
+} // namespace
+
 RenderWorker::RenderWorker(SampleQueue& output_queue, const RenderJob& job,
                            std::stop_source stop_src)
     : queue_(output_queue), job_(job), stop_source_(std::move(stop_src)) {}
 
+RenderWorker::~RenderWorker() {
+    if (thread_.joinable()) {
+        request_stop();
+    }
+    join();
+}
+
 void RenderWorker::start() {
+    if (thread_.joinable()) {
+        throw std::logic_error("RenderWorker is already running");
+    }
     thread_ = std::thread(&RenderWorker::run, this);
 }
 
@@ -35,24 +71,55 @@ bool RenderWorker::is_complete() const {
     return complete_.load(std::memory_order_acquire);
 }
 
+bool RenderWorker::has_failed() const {
+    return failed_.load(std::memory_order_acquire);
+}
+
 size_t RenderWorker::samples_rendered() const {
     return samples_rendered_.load(std::memory_order_acquire);
 }
 
 void RenderWorker::run() {
-    auto stoken = stop_source_.get_token();
-
-    std::string type_str = job_.waveform_config.value("type", "");
-    auto type_result = dsp::waveform_type_from_string(type_str);
-    if (!type_result.has_value()) {
+    auto finish = [this] {
         complete_.store(true, std::memory_order_release);
         queue_.notify_all();
+    };
+
+    try {
+    auto stoken = stop_source_.get_token();
+
+    if (job_.block_size == 0) {
+        spdlog::error("Render job '{}' has zero block size", job_.emitter_id);
+        failed_.store(true, std::memory_order_release);
+        finish();
+        return;
+    }
+    if (job_.block_size > kMaxRenderBlockSamples) {
+        spdlog::error("Render job '{}' block size is too large", job_.emitter_id);
+        failed_.store(true, std::memory_order_release);
+        finish();
+        return;
+    }
+
+    auto total_target_opt = render_target_samples(job_.sample_rate, job_.duration_sec);
+    if (!total_target_opt.has_value()) {
+        spdlog::error("Render job '{}' has invalid rate or duration", job_.emitter_id);
+        failed_.store(true, std::memory_order_release);
+        finish();
+        return;
+    }
+
+    std::string type_str = waveform_type_string(job_.waveform_config);
+    auto type_result = dsp::waveform_type_from_string(type_str);
+    if (!type_result.has_value()) {
+        failed_.store(true, std::memory_order_release);
+        finish();
         return;
     }
     auto source = dsp::create_source(*type_result);
     if (!source) {
-        complete_.store(true, std::memory_order_release);
-        queue_.notify_all();
+        failed_.store(true, std::memory_order_release);
+        finish();
         return;
     }
 
@@ -70,7 +137,7 @@ void RenderWorker::run() {
         chain = impairments::build_chain(*job_.impairments, job_.sample_rate);
     }
 
-    size_t total_target = static_cast<size_t>(job_.sample_rate * job_.duration_sec);
+    size_t total_target = *total_target_opt;
     bool first_block = true;
 
     while (samples_rendered_.load(std::memory_order_relaxed) < total_target) {
@@ -103,17 +170,30 @@ void RenderWorker::run() {
         samples_rendered_.store(new_total, std::memory_order_release);
     }
 
-    if (!stoken.stop_requested() &&
-        samples_rendered_.load(std::memory_order_relaxed) < total_target && !first_block) {
-        SampleBlock sentinel;
-        sentinel.end_of_burst = true;
-        sentinel.start_of_burst = false;
-        queue_.push_wait(std::move(sentinel), stoken);
+    const size_t rendered = samples_rendered_.load(std::memory_order_relaxed);
+    if (!stoken.stop_requested() && rendered < total_target) {
+        failed_.store(true, std::memory_order_release);
+        spdlog::error("Render job '{}' produced {} samples but expected {}",
+                      job_.emitter_id, rendered, total_target);
+        if (!first_block) {
+            SampleBlock sentinel;
+            sentinel.end_of_burst = true;
+            sentinel.start_of_burst = false;
+            queue_.push_wait(std::move(sentinel), stoken);
+        }
     }
 
     spdlog::info("Render complete: {} samples, target {}", samples_rendered_.load(), total_target);
-    complete_.store(true, std::memory_order_release);
-    queue_.notify_all();
+    finish();
+    } catch (const std::exception& e) {
+        spdlog::error("Render job '{}' failed: {}", job_.emitter_id, e.what());
+        failed_.store(true, std::memory_order_release);
+        finish();
+    } catch (...) {
+        spdlog::error("Render job '{}' failed with an unknown error", job_.emitter_id);
+        failed_.store(true, std::memory_order_release);
+        finish();
+    }
 }
 
 std::unique_ptr<dsp::ISource> RenderWorker::create_source(dsp::WaveformType type) {
@@ -121,7 +201,14 @@ std::unique_ptr<dsp::ISource> RenderWorker::create_source(dsp::WaveformType type
 }
 
 std::vector<std::complex<float>> RenderWorker::pre_render(const RenderJob& job) {
-    std::string type_str = job.waveform_config.value("type", "");
+    try {
+    if (job.block_size == 0) return {};
+    if (job.block_size > kMaxRenderBlockSamples) return {};
+    auto total_target_opt = render_target_samples(job.sample_rate, job.duration_sec);
+    if (!total_target_opt.has_value()) return {};
+    if (*total_target_opt > kMaxPreRenderSamples) return {};
+
+    std::string type_str = waveform_type_string(job.waveform_config);
     auto type_result = dsp::waveform_type_from_string(type_str);
     if (!type_result.has_value()) return {};
 
@@ -142,7 +229,7 @@ std::vector<std::complex<float>> RenderWorker::pre_render(const RenderJob& job) 
         chain = impairments::build_chain(*job.impairments, job.sample_rate);
     }
 
-    size_t total_target = static_cast<size_t>(job.sample_rate * job.duration_sec);
+    size_t total_target = *total_target_opt;
     std::vector<std::complex<float>> buffer;
     buffer.reserve(total_target);
 
@@ -165,7 +252,20 @@ std::vector<std::complex<float>> RenderWorker::pre_render(const RenderJob& job) 
         rendered += produced;
     }
 
+    if (rendered != total_target) {
+        spdlog::error("Pre-render job '{}' produced {} samples but expected {}",
+                      job.emitter_id, rendered, total_target);
+        return {};
+    }
+
     return buffer;
+    } catch (const std::exception& e) {
+        spdlog::error("Pre-render job '{}' failed: {}", job.emitter_id, e.what());
+        return {};
+    } catch (...) {
+        spdlog::error("Pre-render job '{}' failed with an unknown error", job.emitter_id);
+        return {};
+    }
 }
 
 } // namespace archerfish::runtime

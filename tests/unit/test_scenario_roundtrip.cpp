@@ -29,6 +29,21 @@ TEST_CASE("Scenario to_json and from_json roundtrip preserves metadata", "[scena
     CHECK(*restored->metadata.version == "1.0");
 }
 
+TEST_CASE("Scenario from_json type errors are returned as structured errors", "[scenario][roundtrip]") {
+    auto j = nlohmann::json{
+        {"metadata", {{"name", "bad_type"}}},
+        {"devices", nlohmann::json::array({{
+            {"id", "usrp0"},
+            {"channel", "zero"},
+            {"rf", {{"freq_hz", 1e9}, {"rate_sps", 1e6}, {"gain_db", 0}}},
+        }})},
+    };
+
+    auto restored = scenario_from_json(j);
+    REQUIRE_FALSE(restored.has_value());
+    REQUIRE(restored.error()[0].code == "E_PLAN_IO_BAD_JSON");
+}
+
 TEST_CASE("Scenario roundtrip preserves devices", "[scenario][roundtrip]") {
     const std::string json_str = R"({
         "metadata": { "name": "dev_rt" },
